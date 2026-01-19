@@ -1,0 +1,586 @@
+/* ===== 基礎設定 ===== */
+:root {
+    --bg-primary: #f5f5f5;
+    --bg-card: #ffffff;
+    --text-primary: #1a1a2e;
+    --text-secondary: #6b7280;
+    --border-color: #e5e7eb;
+    --accent-primary: #e74c3c;
+    --accent-secondary: #3498db;
+    --accent-success: #27ae60;
+    --accent-warning: #f39c12;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.6;
+}
+
+/* ===== 容器 ===== */
+.app-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-bottom: 100px;
+}
+
+.screen {
+    display: none;
+}
+
+.screen.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 首頁標題 ===== */
+.home-header {
+    text-align: center;
+    padding: 30px 0;
+}
+
+.app-title {
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: var(--accent-primary);
+    margin-bottom: 4px;
+}
+
+.app-subtitle {
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+/* ===== 按鈕 ===== */
+.btn {
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.btn-primary {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+    background: #c0392b;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-secondary {
+    background: var(--accent-secondary);
+    color: white;
+}
+
+.btn-success {
+    background: var(--accent-success);
+    color: white;
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-ghost:hover {
+    background: var(--bg-primary);
+}
+
+.btn-large {
+    width: 100%;
+    padding: 16px;
+    font-size: 1.1rem;
+}
+
+.btn-small {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+}
+
+/* ===== 區塊 ===== */
+.section {
+    margin-top: 30px;
+}
+
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    padding-left: 4px;
+}
+
+/* ===== 聚餐列表 ===== */
+.gathering-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.gathering-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--shadow-sm);
+}
+
+.gathering-card:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-md);
+}
+
+.gathering-card-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.gathering-card-info {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.gathering-card-stats {
+    display: flex;
+    gap: 16px;
+    margin-top: 10px;
+    font-size: 0.85rem;
+}
+
+.gathering-card-stats span {
+    color: var(--accent-secondary);
+    font-weight: 500;
+}
+
+.empty-message {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 30px;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--border-color);
+}
+
+/* ===== 管理員按鈕 ===== */
+.admin-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    opacity: 0.6;
+}
+
+.admin-btn:hover {
+    opacity: 1;
+}
+
+/* ===== Modal ===== */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    width: 100%;
+    max-width: 400px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: modalIn 0.3s ease;
+}
+
+.modal-large {
+    max-width: 500px;
+}
+
+@keyframes modalIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.modal-content h2 {
+    margin-bottom: 20px;
+    font-size: 1.3rem;
+}
+
+/* ===== 表單 ===== */
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: var(--text-secondary);
+}
+
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 1rem;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.form-actions .btn {
+    flex: 1;
+}
+
+/* ===== 聚餐詳情頁 ===== */
+.gathering-header {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 20px;
+}
+
+.back-btn {
+    background: none;
+    border: none;
+    color: var(--accent-secondary);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 8px;
+    font-family: inherit;
+}
+
+.gathering-header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+}
+
+.gathering-info {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+/* ===== 統計列 ===== */
+.stats-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat {
+    flex: 1;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+}
+
+.stat-number {
+    display: block;
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--accent-primary);
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* ===== 家庭分組 ===== */
+.family-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.family-group {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+.group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    background: #fafafa;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.group-header:hover {
+    background: #f0f0f0;
+}
+
+.group-title {
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+.group-count {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.group-toggle {
+    font-size: 1.2rem;
+    transition: transform 0.3s;
+}
+
+.family-group.expanded .group-toggle {
+    transform: rotate(180deg);
+}
+
+.group-content {
+    display: none;
+    padding: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.family-group.expanded .group-content {
+    display: block;
+}
+
+/* ===== 成員列表 ===== */
+.member-item {
+    display: flex;
+    flex-direction: column;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.member-item:last-child {
+    border-bottom: none;
+}
+
+.member-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.member-checkbox {
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    accent-color: var(--accent-success);
+}
+
+.member-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.member-status {
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    border-radius: 20px;
+    background: #e8f5e9;
+    color: var(--accent-success);
+}
+
+.member-status.not-attending {
+    background: #fafafa;
+    color: var(--text-secondary);
+}
+
+.order-input-container {
+    margin-top: 10px;
+    margin-left: 34px;
+}
+
+.order-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+.order-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.order-input:disabled {
+    background: #f5f5f5;
+    color: #999;
+}
+
+/* ===== 底部操作區 ===== */
+.bottom-actions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 16px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.bottom-actions .btn {
+    max-width: 600px;
+    margin: 0 auto;
+    display: block;
+}
+
+/* ===== 統計結果 ===== */
+.summary-content {
+    background: #f9f9f9;
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    margin-bottom: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.summary-section {
+    margin-bottom: 20px;
+}
+
+.summary-section:last-child {
+    margin-bottom: 0;
+}
+
+.summary-section h3 {
+    font-size: 1rem;
+    color: var(--accent-primary);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.summary-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+.summary-item:last-child {
+    border-bottom: none;
+}
+
+.summary-item-name {
+    font-weight: 500;
+}
+
+.summary-item-count {
+    color: var(--accent-secondary);
+    font-weight: 700;
+}
+
+.summary-total {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 2px solid var(--accent-primary);
+    font-size: 1.1rem;
+    font-weight: 700;
+    text-align: right;
+}
+
+/* ===== 管理員頁面 ===== */
+.admin-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.btn-danger {
+    background: #e74c3c;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c0392b;
+}
+
+/* ===== 響應式 ===== */
+@media (max-width: 400px) {
+    .app-container {
+        padding: 12px;
+    }
+    
+    .app-title {
+        font-size: 1.5rem;
+    }
+    
+    .stats-bar {
+        gap: 10px;
+    }
+    
+    .stat {
+        padding: 12px;
+    }
+    
+    .stat-number {
+        font-size: 1.6rem;
+    }
+}
