@@ -43,11 +43,12 @@ const familyGroups = [
 ];
 
 // ===== 管理員密碼 =====
-const ADMIN_PASSWORD = 'family2025'; // 你可以改成自己想要的密碼
+const ADMIN_PASSWORD = 'family2025';
 
 // ===== 全域變數 =====
 let currentGatheringId = null;
-let unsubscribe = null; // Firestore 即時監聽
+let unsubscribe = null;
+let expandedGroups = new Set(); // 記錄展開的分組
 
 // ===== DOM 元素 =====
 const screens = {
@@ -101,11 +102,12 @@ function setupEventListeners() {
     // 聚餐詳情
     document.getElementById('back-to-home').addEventListener('click', () => {
         if (unsubscribe) unsubscribe();
+        expandedGroups.clear();
         showScreen('home');
         loadGatherings();
     });
     
-    // AI 整理
+    // 統計
     document.getElementById('summarize-btn').addEventListener('click', summarizeOrders);
     document.getElementById('close-summary').addEventListener('click', () => hideModal('summary'));
     document.getElementById('copy-summary').addEventListener('click', copySummary);
@@ -131,7 +133,7 @@ async function loadGatherings() {
             .get();
         
         if (snapshot.empty) {
-            listEl.innerHTML = '<p class="empty-message">目前沒有進行中的聚餐</p>';
+            listEl.innerHTML = '<p class="empty-message">目前沒有進行中的聚餐<br><span>點擊上方按鈕建立一個吧！</span></p>';
             return;
         }
         
@@ -153,16 +155,16 @@ function createGatheringCard(id, data) {
     card.onclick = () => openGathering(id);
     
     const attendingCount = countAttending(data.attendees || {});
-    const orderedCount = countOrdered(data.orders || {});
+    const orderedCount = countTotalOrders(data.orders || {});
     
     card.innerHTML = `
         <div class="gathering-card-title">${data.name}</div>
         <div class="gathering-card-info">
-            📅 ${data.date}${data.restaurant ? ` · 🍽️ ${data.restaurant}` : ''}
+            📅 ${data.date}${data.restaurant ? ` · 🏪 ${data.restaurant}` : ''}
         </div>
         <div class="gathering-card-stats">
             <span>👥 ${attendingCount} 人參加</span>
-            <span>📝 ${orderedCount} 已點餐</span>
+            <span>🍜 ${orderedCount} 份餐點</span>
         </div>
     `;
     
@@ -189,7 +191,7 @@ async function createGathering(e) {
             restaurant,
             status: 'active',
             attendees: {},
-            orders: {},
+            orders: {}, // orders[member] = ['餐點1', '餐點2', ...]
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
@@ -223,13 +225,13 @@ function openGathering(id) {
 function renderGatheringDetail(data) {
     document.getElementById('gathering-title').textContent = data.name;
     document.getElementById('gathering-info').textContent = 
-        `📅 ${data.date}${data.restaurant ? ` · 🍽️ ${data.restaurant}` : ''}`;
+        `📅 ${data.date}${data.restaurant ? ` · 🏪 ${data.restaurant}` : ''}`;
     
     const attendees = data.attendees || {};
     const orders = data.orders || {};
     
     document.getElementById('total-attending').textContent = countAttending(attendees);
-    document.getElementById('total-ordered').textContent = countOrdered(orders);
+    document.getElementById('total-ordered').textContent = countTotalOrders(orders);
     
     renderFamilyGroups(attendees, orders);
 }
@@ -242,6 +244,11 @@ function renderFamilyGroups(attendees, orders) {
         const groupEl = document.createElement('div');
         groupEl.className = 'family-group';
         groupEl.id = `group-${group.id}`;
+        
+        // 保持展開狀態
+        if (expandedGroups.has(group.id)) {
+            groupEl.classList.add('expanded');
+        }
         
         const attendingInGroup = group.members.filter(m => attendees[m]).length;
         
@@ -264,26 +271,44 @@ function renderFamilyGroups(attendees, orders) {
 
 function renderMemberItem(member, attendees, orders) {
     const isAttending = attendees[member] || false;
-    const order = orders[member] || '';
+    const memberOrders = orders[member] || [];
+    
+    // 確保至少有一個空的輸入欄位
+    const displayOrders = memberOrders.length > 0 ? memberOrders : [''];
     
     return `
-        <div class="member-item">
+        <div class="member-item" data-member="${member}">
             <div class="member-row">
                 <input type="checkbox" class="member-checkbox" 
                     ${isAttending ? 'checked' : ''} 
                     onchange="updateAttendance('${member}', this.checked)">
                 <span class="member-name">${member}</span>
                 <span class="member-status ${isAttending ? '' : 'not-attending'}">
-                    ${isAttending ? '參加' : '未參加'}
+                    ${isAttending ? '✓ 參加' : '未參加'}
                 </span>
             </div>
-            <div class="order-input-container">
-                <input type="text" class="order-input" 
-                    placeholder="輸入餐點..."
-                    value="${order}"
-                    ${isAttending ? '' : 'disabled'}
-                    onchange="updateOrder('${member}', this.value)"
-                    onfocus="this.select()">
+            <div class="orders-container">
+                ${displayOrders.map((order, index) => `
+                    <div class="order-item">
+                        <input type="text" class="order-input" 
+                            placeholder="輸入餐點名稱..."
+                            value="${order}"
+                            ${isAttending ? '' : 'disabled'}
+                            data-member="${member}"
+                            data-index="${index}"
+                            onchange="updateSingleOrder('${member}', ${index}, this.value)">
+                        ${displayOrders.length > 1 ? `
+                            <button class="btn-remove-order" 
+                                onclick="removeOrder('${member}', ${index})"
+                                ${isAttending ? '' : 'disabled'}>×</button>
+                        ` : ''}
+                    </div>
+                `).join('')}
+                <button class="btn-add-order" 
+                    onclick="addOrder('${member}')"
+                    ${isAttending ? '' : 'disabled'}>
+                    ＋ 新增餐點
+                </button>
             </div>
         </div>
     `;
@@ -292,6 +317,13 @@ function renderMemberItem(member, attendees, orders) {
 function toggleGroup(groupId) {
     const groupEl = document.getElementById(`group-${groupId}`);
     groupEl.classList.toggle('expanded');
+    
+    // 記錄展開狀態
+    if (groupEl.classList.contains('expanded')) {
+        expandedGroups.add(groupId);
+    } else {
+        expandedGroups.delete(groupId);
+    }
 }
 
 // ===== 更新出席狀態 =====
@@ -299,31 +331,88 @@ async function updateAttendance(member, isAttending) {
     if (!currentGatheringId) return;
     
     try {
-        await db.collection('gatherings').doc(currentGatheringId).update({
+        const updates = {
             [`attendees.${member}`]: isAttending
-        });
+        };
         
         // 如果取消參加，清空餐點
         if (!isAttending) {
-            await db.collection('gatherings').doc(currentGatheringId).update({
-                [`orders.${member}`]: firebase.firestore.FieldValue.delete()
-            });
+            updates[`orders.${member}`] = firebase.firestore.FieldValue.delete();
+        } else {
+            // 如果參加，初始化一個空的餐點陣列
+            updates[`orders.${member}`] = [''];
         }
+        
+        await db.collection('gatherings').doc(currentGatheringId).update(updates);
     } catch (error) {
         console.error('更新失敗:', error);
     }
 }
 
-// ===== 更新餐點 =====
-async function updateOrder(member, order) {
+// ===== 更新單筆餐點 =====
+async function updateSingleOrder(member, index, value) {
     if (!currentGatheringId) return;
     
     try {
+        // 先取得目前的餐點
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        const memberOrders = orders[member] || [''];
+        
+        // 更新指定索引的餐點
+        memberOrders[index] = value.trim();
+        
         await db.collection('gatherings').doc(currentGatheringId).update({
-            [`orders.${member}`]: order.trim()
+            [`orders.${member}`]: memberOrders
         });
     } catch (error) {
         console.error('更新餐點失敗:', error);
+    }
+}
+
+// ===== 新增餐點欄位 =====
+async function addOrder(member) {
+    if (!currentGatheringId) return;
+    
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        const memberOrders = orders[member] || [];
+        
+        memberOrders.push('');
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            [`orders.${member}`]: memberOrders
+        });
+    } catch (error) {
+        console.error('新增餐點失敗:', error);
+    }
+}
+
+// ===== 移除餐點欄位 =====
+async function removeOrder(member, index) {
+    if (!currentGatheringId) return;
+    
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        const memberOrders = orders[member] || [];
+        
+        memberOrders.splice(index, 1);
+        
+        // 確保至少有一個空欄位
+        if (memberOrders.length === 0) {
+            memberOrders.push('');
+        }
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            [`orders.${member}`]: memberOrders
+        });
+    } catch (error) {
+        console.error('移除餐點失敗:', error);
     }
 }
 
@@ -332,11 +421,17 @@ function countAttending(attendees) {
     return Object.values(attendees).filter(v => v).length;
 }
 
-function countOrdered(orders) {
-    return Object.values(orders).filter(v => v && v.trim()).length;
+function countTotalOrders(orders) {
+    let count = 0;
+    Object.values(orders).forEach(memberOrders => {
+        if (Array.isArray(memberOrders)) {
+            count += memberOrders.filter(o => o && o.trim()).length;
+        }
+    });
+    return count;
 }
 
-// ===== AI 整理餐點 =====
+// ===== 統計餐點 =====
 function summarizeOrders() {
     db.collection('gatherings').doc(currentGatheringId).get().then(doc => {
         const data = doc.data();
@@ -345,122 +440,51 @@ function summarizeOrders() {
         
         // 收集所有餐點
         const allItems = [];
+        const memberDetails = [];
         
-        Object.entries(orders).forEach(([member, order]) => {
-            if (!order || !attendees[member]) return;
+        Object.entries(orders).forEach(([member, memberOrders]) => {
+            if (!attendees[member] || !Array.isArray(memberOrders)) return;
             
-            // 分割餐點（支援 +、,、、、和、/）
-            const items = order.split(/[+,、和/]/).map(s => s.trim()).filter(s => s);
-            items.forEach(item => {
-                allItems.push({ member, item: normalizeItem(item) });
-            });
+            const validOrders = memberOrders.filter(o => o && o.trim());
+            if (validOrders.length > 0) {
+                memberDetails.push({ member, orders: validOrders });
+                validOrders.forEach(item => {
+                    allItems.push(item.trim());
+                });
+            }
         });
         
-        // 合併相似餐點
-        const grouped = groupSimilarItems(allItems);
+        // 直接統計（不做任何轉換）
+        const grouped = {};
+        allItems.forEach(item => {
+            if (!grouped[item]) {
+                grouped[item] = 0;
+            }
+            grouped[item]++;
+        });
+        
+        // 轉換成陣列並排序
+        const sortedItems = Object.entries(grouped)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count);
         
         // 顯示結果
-        renderSummary(grouped, attendees, orders);
+        renderSummary(sortedItems, memberDetails);
         showModal('summary');
     });
 }
 
-// 標準化餐點名稱
-function normalizeItem(item) {
-    // 移除多餘空格
-    item = item.trim();
-    
-    // 常見同義詞對照
-    const synonyms = {
-        // 青醬相關
-        '雞肉青醬': '青醬雞肉',
-        '雞腿青醬': '青醬雞腿',
-        '牛肉青醬': '青醬牛肉',
-        '豬肉青醬': '青醬豬肉',
-        '海鮮青醬': '青醬海鮮',
-        
-        // 燉飯
-        '飯': '燉飯',
-        
-        // 湯品
-        '牛肉清湯': '牛肉湯',
-        '牛肉濃湯': '牛肉湯',
-        '玉米濃湯': '玉米湯',
-        '玉米清湯': '玉米湯',
-        
-        // 義大利麵
-        '義大利面': '義大利麵',
-        '意大利麵': '義大利麵',
-        '意大利面': '義大利麵',
-    };
-    
-    // 檢查完全匹配
-    if (synonyms[item]) {
-        return synonyms[item];
-    }
-    
-    // 排序關鍵字（讓「雞肉青醬燉飯」和「青醬雞肉燉飯」一樣）
-    const keywords = extractKeywords(item);
-    
-    return keywords.sorted + (keywords.suffix || '');
-}
-
-function extractKeywords(item) {
-    // 定義關鍵字類別
-    const sauces = ['青醬', '紅醬', '白醬', '奶油', '蒜香', '茄汁', '咖哩'];
-    const proteins = ['雞肉', '雞腿', '牛肉', '豬肉', '海鮮', '鮭魚', '蝦', '蛤蜊', '培根'];
-    const bases = ['燉飯', '義大利麵', '披薩', '焗烤', '麵', '飯'];
-    const soups = ['湯', '濃湯', '清湯'];
-    
-    let foundSauce = '';
-    let foundProtein = '';
-    let foundBase = '';
-    let foundSoup = '';
-    
-    sauces.forEach(s => { if (item.includes(s)) foundSauce = s; });
-    proteins.forEach(p => { if (item.includes(p)) foundProtein = p; });
-    bases.forEach(b => { if (item.includes(b)) foundBase = b; });
-    soups.forEach(s => { if (item.includes(s)) foundSoup = s; });
-    
-    // 如果是湯品
-    if (foundSoup && !foundBase) {
-        return { sorted: foundProtein + foundSoup, suffix: '' };
-    }
-    
-    // 標準順序：醬料 + 蛋白質 + 主食
-    const sorted = [foundSauce, foundProtein, foundBase].filter(k => k).join('');
-    
-    return { sorted: sorted || item, suffix: '' };
-}
-
-function groupSimilarItems(allItems) {
-    const groups = {};
-    
-    allItems.forEach(({ member, item }) => {
-        if (!groups[item]) {
-            groups[item] = { count: 0, members: [] };
-        }
-        groups[item].count++;
-        groups[item].members.push(member);
-    });
-    
-    // 轉換成陣列並排序
-    return Object.entries(groups)
-        .map(([name, data]) => ({ name, ...data }))
-        .sort((a, b) => b.count - a.count);
-}
-
-function renderSummary(grouped, attendees, orders) {
+function renderSummary(sortedItems, memberDetails) {
     const container = document.getElementById('summary-content');
     
-    if (grouped.length === 0) {
-        container.innerHTML = '<p style="text-align:center;color:#999;">還沒有人點餐</p>';
+    if (sortedItems.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#8a8a8a;padding:20px;">還沒有人點餐 🍽️</p>';
         return;
     }
     
     // 餐點統計
     let html = '<div class="summary-section"><h3>📊 餐點統計</h3>';
-    grouped.forEach(item => {
+    sortedItems.forEach(item => {
         html += `
             <div class="summary-item">
                 <span class="summary-item-name">${item.name}</span>
@@ -469,21 +493,19 @@ function renderSummary(grouped, attendees, orders) {
         `;
     });
     
-    const totalItems = grouped.reduce((sum, item) => sum + item.count, 0);
-    html += `<div class="summary-total">共 ${totalItems} 份餐點</div>`;
+    const totalItems = sortedItems.reduce((sum, item) => sum + item.count, 0);
+    html += `<div class="summary-total">共 ${totalItems} 份餐點 🎉</div>`;
     html += '</div>';
     
     // 個人點餐明細
     html += '<div class="summary-section"><h3>👥 個人明細</h3>';
-    Object.entries(orders).forEach(([member, order]) => {
-        if (order && attendees[member]) {
-            html += `
-                <div class="summary-item">
-                    <span class="summary-item-name">${member}</span>
-                    <span style="color:#666;font-size:0.9rem;">${order}</span>
-                </div>
-            `;
-        }
+    memberDetails.forEach(({ member, orders }) => {
+        html += `
+            <div class="summary-item">
+                <span class="summary-item-name">${member}</span>
+                <span style="color:#8a8a8a;font-size:0.9rem;">${orders.join('、')}</span>
+            </div>
+        `;
     });
     html += '</div>';
     
@@ -496,38 +518,45 @@ function copySummary() {
         const orders = data.orders || {};
         const attendees = data.attendees || {};
         
-        // 收集並整理餐點
+        // 收集所有餐點
         const allItems = [];
-        Object.entries(orders).forEach(([member, order]) => {
-            if (!order || !attendees[member]) return;
-            const items = order.split(/[+,、和/]/).map(s => s.trim()).filter(s => s);
-            items.forEach(item => {
-                allItems.push({ member, item: normalizeItem(item) });
+        Object.entries(orders).forEach(([member, memberOrders]) => {
+            if (!attendees[member] || !Array.isArray(memberOrders)) return;
+            memberOrders.filter(o => o && o.trim()).forEach(item => {
+                allItems.push(item.trim());
             });
         });
         
-        const grouped = groupSimilarItems(allItems);
+        // 統計
+        const grouped = {};
+        allItems.forEach(item => {
+            if (!grouped[item]) grouped[item] = 0;
+            grouped[item]++;
+        });
+        
+        const sortedItems = Object.entries(grouped)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count);
         
         // 產生文字
         let text = `🍽️ ${data.name}\n`;
         text += `📅 ${data.date}${data.restaurant ? ` · ${data.restaurant}` : ''}\n\n`;
         text += `📊 餐點統計：\n`;
-        grouped.forEach(item => {
+        sortedItems.forEach(item => {
             text += `• ${item.name} × ${item.count}\n`;
         });
-        text += `\n共 ${grouped.reduce((sum, item) => sum + item.count, 0)} 份餐點`;
+        text += `\n共 ${sortedItems.reduce((sum, item) => sum + item.count, 0)} 份餐點`;
         
         navigator.clipboard.writeText(text).then(() => {
-            alert('已複製到剪貼簿！');
+            alert('已複製到剪貼簿！📋');
         }).catch(() => {
-            // 備用方案
             const textarea = document.createElement('textarea');
             textarea.value = text;
             document.body.appendChild(textarea);
             textarea.select();
             document.execCommand('copy');
             document.body.removeChild(textarea);
-            alert('已複製到剪貼簿！');
+            alert('已複製到剪貼簿！📋');
         });
     });
 }
@@ -543,7 +572,7 @@ function adminLogin(e) {
         showScreen('admin');
         loadAdminGatherings();
     } else {
-        alert('密碼錯誤');
+        alert('密碼錯誤 🔒');
     }
 }
 
@@ -571,22 +600,22 @@ async function loadAdminGatherings() {
             card.innerHTML = `
                 <div class="gathering-card-title">
                     ${data.name}
-                    <span style="font-size:0.8rem;color:${data.status === 'active' ? '#27ae60' : '#999'};">
+                    <span style="font-size:0.8rem;color:${data.status === 'active' ? '#7fcdbb' : '#b5b5b5'};">
                         [${data.status === 'active' ? '進行中' : '已結束'}]
                     </span>
                 </div>
                 <div class="gathering-card-info">
-                    📅 ${data.date}${data.restaurant ? ` · 🍽️ ${data.restaurant}` : ''}
+                    📅 ${data.date}${data.restaurant ? ` · 🏪 ${data.restaurant}` : ''}
                 </div>
                 <div class="gathering-card-stats">
                     <span>👥 ${attendingCount} 人參加</span>
                 </div>
                 <div class="admin-actions">
-                    <button class="btn btn-small ${data.status === 'active' ? 'btn-ghost' : 'btn-secondary'}" 
-                        onclick="toggleGatheringStatus('${doc.id}', '${data.status}')">
+                    <button class="btn btn-small ${data.status === 'active' ? 'btn-ghost' : 'btn-success'}" 
+                        onclick="event.stopPropagation(); toggleGatheringStatus('${doc.id}', '${data.status}')">
                         ${data.status === 'active' ? '結束聚餐' : '重新開啟'}
                     </button>
-                    <button class="btn btn-small btn-danger" onclick="deleteGathering('${doc.id}')">
+                    <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); deleteGathering('${doc.id}')">
                         刪除
                     </button>
                 </div>
@@ -611,7 +640,7 @@ async function toggleGatheringStatus(id, currentStatus) {
 }
 
 async function deleteGathering(id) {
-    if (!confirm('確定要刪除這個聚餐嗎？此操作無法復原。')) return;
+    if (!confirm('確定要刪除這個聚餐嗎？\n此操作無法復原 ⚠️')) return;
     
     try {
         await db.collection('gatherings').doc(id).delete();
@@ -624,6 +653,8 @@ async function deleteGathering(id) {
 // ===== 讓函式可在 HTML 中使用 =====
 window.toggleGroup = toggleGroup;
 window.updateAttendance = updateAttendance;
-window.updateOrder = updateOrder;
+window.updateSingleOrder = updateSingleOrder;
+window.addOrder = addOrder;
+window.removeOrder = removeOrder;
 window.toggleGatheringStatus = toggleGatheringStatus;
 window.deleteGathering = deleteGathering;
