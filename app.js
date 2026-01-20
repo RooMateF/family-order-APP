@@ -13,14 +13,46 @@ const db = firebase.firestore();
 // ===== Gemini API =====
 const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY_HERE';
 
-// ===== 家庭成員 =====
+// ===== 家庭成員 - 使用英文 ID =====
 const familyGroups = [
-    { id: 'grandparents', name: '阿公阿嬤', members: ['陳惠舜', '林貞惠'] },
-    { id: 'family1', name: '世松家', members: ['陳世松', '張秋蓮', '陳昱臻', '陳昱瑋'] },
-    { id: 'family2', name: '世賓家', members: ['陳世賓', '鄭瑩', '陳昱婕', '陳宇'] },
-    { id: 'family3', name: '慶龍家', members: ['江慶龍', '陳怡君', '江柏宏', '江冠宏'] },
-    { id: 'family4', name: '朝慶家', members: ['陳朝慶', '陳一辰', '陳奕豪'] }
+    { id: 'grandparents', name: '阿公阿嬤', members: [
+        { id: 'm01', name: '陳惠舜' },
+        { id: 'm02', name: '林貞惠' }
+    ]},
+    { id: 'family1', name: '世松家', members: [
+        { id: 'm03', name: '陳世松' },
+        { id: 'm04', name: '張秋蓮' },
+        { id: 'm05', name: '陳昱臻' },
+        { id: 'm06', name: '陳昱瑋' }
+    ]},
+    { id: 'family2', name: '世賓家', members: [
+        { id: 'm07', name: '陳世賓' },
+        { id: 'm08', name: '鄭瑩' },
+        { id: 'm09', name: '陳昱婕' },
+        { id: 'm10', name: '陳宇' }
+    ]},
+    { id: 'family3', name: '慶龍家', members: [
+        { id: 'm11', name: '江慶龍' },
+        { id: 'm12', name: '陳怡君' },
+        { id: 'm13', name: '江柏宏' },
+        { id: 'm14', name: '江冠宏' }
+    ]},
+    { id: 'family4', name: '朝慶家', members: [
+        { id: 'm15', name: '陳朝慶' },
+        { id: 'm16', name: '陳一辰' },
+        { id: 'm17', name: '陳奕豪' }
+    ]}
 ];
+
+// 建立快速查詢表
+const memberById = {};
+const memberNameById = {};
+familyGroups.forEach(g => {
+    g.members.forEach(m => {
+        memberById[m.id] = m;
+        memberNameById[m.id] = m.name;
+    });
+});
 
 const ADMIN_PASSWORD = 'family2025';
 const SUPER_ADMIN_PASSWORD = 'superadmin2025';
@@ -76,7 +108,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupEventListeners() {
-    // 建立聚餐
     document.getElementById('create-gathering-btn').addEventListener('click', () => {
         document.getElementById('gathering-date').valueAsDate = new Date();
         updateMenuSelect();
@@ -85,24 +116,20 @@ function setupEventListeners() {
     document.getElementById('cancel-create').addEventListener('click', () => hideModal('create'));
     document.getElementById('create-form').addEventListener('submit', createGathering);
     
-    // 刪除
     document.getElementById('cancel-delete').addEventListener('click', () => hideModal('delete'));
     document.getElementById('confirm-delete').addEventListener('click', confirmDelete);
     
-    // 管理員
     document.getElementById('admin-btn').addEventListener('click', () => showModal('admin'));
     document.getElementById('cancel-admin').addEventListener('click', () => hideModal('admin'));
     document.getElementById('admin-form').addEventListener('submit', adminLogin);
     document.getElementById('admin-back-to-home').addEventListener('click', () => showScreen('home'));
     
-    // 超級管理員
     document.getElementById('cancel-super-admin').addEventListener('click', () => hideModal('superAdmin'));
     document.getElementById('super-admin-form').addEventListener('submit', superAdminLogin);
     document.getElementById('super-admin-back').addEventListener('click', () => { isSuperAdmin = false; showScreen('home'); });
     document.getElementById('set-forced-result').addEventListener('click', setForcedResult);
     document.getElementById('clear-forced-result').addEventListener('click', clearForcedResult);
     
-    // 聚餐詳情
     document.getElementById('back-to-home').addEventListener('click', () => {
         if (unsubscribe) unsubscribe();
         expandedGroups.clear();
@@ -115,12 +142,10 @@ function setupEventListeners() {
     document.getElementById('copy-summary').addEventListener('click', copySummary);
     document.getElementById('ai-summarize-btn').addEventListener('click', () => summarizeOrders(true));
     
-    // 輪盤
     document.getElementById('add-wheel-option').addEventListener('click', addWheelOption);
     document.getElementById('wheel-new-option').addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); addWheelOption(); } });
     document.getElementById('spin-wheel-btn').addEventListener('click', spinWheel);
     
-    // 菜單管理
     document.getElementById('menu-manage-btn').addEventListener('click', () => { showScreen('menu'); renderMenuList(); });
     document.getElementById('menu-back').addEventListener('click', () => showScreen('home'));
     document.getElementById('create-menu-btn').addEventListener('click', () => openMenuEditor(null));
@@ -129,12 +154,10 @@ function setupEventListeners() {
     document.getElementById('new-item-name').addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); addMenuItem(); } });
     document.getElementById('save-menu-btn').addEventListener('click', saveMenu);
     
-    // Modal 外部點擊
     Object.values(modals).forEach(modal => {
         modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
     });
     
-    // 隱藏超級管理員
     let clicks = 0, timer = null;
     document.querySelector('.app-title').addEventListener('click', () => {
         clicks++;
@@ -143,7 +166,6 @@ function setupEventListeners() {
         if (clicks >= 5) { clicks = 0; showModal('superAdmin'); }
     });
     
-    // 關閉菜單提示
     document.addEventListener('click', (e) => {
         const suggestions = document.getElementById('menu-suggestions');
         if (!e.target.classList.contains('order-input')) {
@@ -255,7 +277,6 @@ function openGathering(id) {
     unsubscribe = db.collection('gatherings').doc(id).onSnapshot(doc => {
         if (!doc.exists) { alert('聚餐不存在'); showScreen('home'); return; }
         currentGatheringData = doc.data();
-        // 載入對應菜單
         if (currentGatheringData.menuId) {
             currentMenuData = menus.find(m => m.id === currentGatheringData.menuId) || null;
         } else {
@@ -302,10 +323,10 @@ function renderFamilyGroups(attendees, orders, isClosed) {
         el.className = 'family-group' + (expandedGroups.has(group.id) ? ' expanded' : '');
         el.id = `group-${group.id}`;
         
-        const count = group.members.filter(m => attendees[m]).length;
+        const count = group.members.filter(m => attendees[m.id]).length;
         let groupTotal = 0;
         group.members.forEach(m => {
-            const memberOrders = orders[m] || [];
+            const memberOrders = orders[m.id] || [];
             memberOrders.forEach(o => { if (o && o.price) groupTotal += parseInt(o.price) || 0; });
         });
         
@@ -327,19 +348,21 @@ function renderFamilyGroups(attendees, orders, isClosed) {
 }
 
 function renderMember(member, attendees, orders, canEdit) {
-    const attending = attendees[member] || false;
-    const memberOrders = orders[member] || [];
+    const memberId = member.id;
+    const memberName = member.name;
+    const attending = attendees[memberId] || false;
+    const memberOrders = orders[memberId] || [];
     const display = memberOrders.length > 0 ? memberOrders : [{ name: '', price: '' }];
     
     let memberTotal = 0;
     memberOrders.forEach(o => { if (o && o.price) memberTotal += parseInt(o.price) || 0; });
     
     return `
-        <div class="member-item" data-member="${member}">
+        <div class="member-item" data-member-id="${memberId}">
             <div class="member-row">
                 <input type="checkbox" class="member-checkbox" ${attending ? 'checked' : ''} ${canEdit ? '' : 'disabled'}
-                    onchange="updateAttendance('${member}', this.checked)">
-                <span class="member-name">${member}</span>
+                    onchange="updateAttendance('${memberId}', this.checked)">
+                <span class="member-name">${memberName}</span>
                 <span class="member-status ${attending ? '' : 'not-attending'}">${attending ? '參加' : '未參加'}</span>
                 ${memberTotal > 0 ? `<span class="member-total">$${memberTotal}</span>` : ''}
             </div>
@@ -350,20 +373,20 @@ function renderMember(member, attendees, orders, canEdit) {
                             <input type="text" class="order-input" placeholder="輸入餐點..." 
                                 value="${o.name || ''}"
                                 ${attending && canEdit ? '' : 'disabled'} 
-                                data-member="${member}" data-index="${i}"
+                                data-member-id="${memberId}" data-index="${i}"
                                 oninput="showMenuSuggestions(this)"
-                                onchange="updateSingleOrder('${member}', ${i}, 'name', this.value)"
+                                onchange="updateSingleOrder('${memberId}', ${i}, 'name', this.value)"
                                 onfocus="showMenuSuggestions(this)">
                         </div>
                         <input type="number" class="order-price" placeholder="$" 
                             value="${o.price || ''}"
                             ${attending && canEdit ? '' : 'disabled'}
-                            data-member="${member}" data-index="${i}"
-                            onchange="updateSingleOrder('${member}', ${i}, 'price', this.value)">
-                        ${display.length > 1 ? `<button class="btn-remove-order" onclick="removeOrder('${member}', ${i})" ${canEdit ? '' : 'disabled'}>×</button>` : ''}
+                            data-member-id="${memberId}" data-index="${i}"
+                            onchange="updateSingleOrder('${memberId}', ${i}, 'price', this.value)">
+                        ${display.length > 1 ? `<button class="btn-remove-order" onclick="removeOrder('${memberId}', ${i})" ${canEdit ? '' : 'disabled'}>×</button>` : ''}
                     </div>
                 `).join('')}
-                <button class="btn-add-order" onclick="addOrder('${member}')" ${attending && canEdit ? '' : 'disabled'}>+ 新增餐點</button>
+                <button class="btn-add-order" onclick="addOrder('${memberId}')" ${attending && canEdit ? '' : 'disabled'}>+ 新增餐點</button>
             </div>
         </div>
     `;
@@ -401,7 +424,7 @@ function showMenuSuggestions(input) {
     suggestions.style.width = rect.width + 'px';
     
     suggestions.innerHTML = matches.slice(0, 8).map(item => `
-        <div class="menu-suggestion-item" onclick="selectSuggestion('${item.name}', ${item.price || 0})">
+        <div class="menu-suggestion-item" onclick="selectSuggestion('${item.name.replace(/'/g, "\\'")}', ${item.price || 0})">
             <span>${item.name}</span>
             ${item.price ? `<span class="menu-suggestion-price">$${item.price}</span>` : ''}
         </div>
@@ -413,64 +436,111 @@ function showMenuSuggestions(input) {
 function selectSuggestion(name, price) {
     if (!activeSuggestionInput) return;
     
-    const member = activeSuggestionInput.dataset.member;
+    const memberId = activeSuggestionInput.dataset.memberId;
     const index = parseInt(activeSuggestionInput.dataset.index);
     
     activeSuggestionInput.value = name;
     
-    // 更新價格欄位
-    const priceInput = document.querySelector(`.order-price[data-member="${member}"][data-index="${index}"]`);
+    const priceInput = document.querySelector(`.order-price[data-member-id="${memberId}"][data-index="${index}"]`);
     if (priceInput && price) {
         priceInput.value = price;
     }
     
-    // 儲存到資料庫
-    updateSingleOrder(member, index, 'name', name);
-    if (price) updateSingleOrder(member, index, 'price', price);
+    updateSingleOrder(memberId, index, 'name', name);
+    if (price) updateSingleOrder(memberId, index, 'price', price);
     
     document.getElementById('menu-suggestions').classList.remove('show');
     activeSuggestionInput = null;
 }
 
-// ===== 資料操作 =====
-async function updateAttendance(member, attending) {
+// ===== 資料操作 - 使用整個物件更新避免中文路徑問題 =====
+async function updateAttendance(memberId, attending) {
     if (!currentGatheringId) return;
-    const updates = { [`attendees.${member}`]: attending };
-    if (!attending) {
-        updates[`orders.${member}`] = firebase.firestore.FieldValue.delete();
-    } else {
-        updates[`orders.${member}`] = [{ name: '', price: '' }];
+    
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const attendees = data.attendees || {};
+        const orders = data.orders || {};
+        
+        attendees[memberId] = attending;
+        
+        if (!attending) {
+            delete orders[memberId];
+        } else {
+            orders[memberId] = [{ name: '', price: '' }];
+        }
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            attendees: attendees,
+            orders: orders
+        });
+    } catch (e) {
+        console.error('更新出席失敗:', e);
     }
-    await db.collection('gatherings').doc(currentGatheringId).update(updates);
 }
 
-async function updateSingleOrder(member, index, field, value) {
+async function updateSingleOrder(memberId, index, field, value) {
     if (!currentGatheringId) return;
-    const doc = await db.collection('gatherings').doc(currentGatheringId).get();
-    const orders = doc.data().orders || {};
-    const arr = orders[member] || [{ name: '', price: '' }];
     
-    if (!arr[index]) arr[index] = { name: '', price: '' };
-    arr[index][field] = field === 'price' ? (value ? parseInt(value) : '') : value.trim();
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        const arr = orders[memberId] || [{ name: '', price: '' }];
+        
+        if (!arr[index]) arr[index] = { name: '', price: '' };
+        arr[index][field] = field === 'price' ? (value ? parseInt(value) : '') : value.trim();
+        
+        orders[memberId] = arr;
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            orders: orders
+        });
+    } catch (e) {
+        console.error('更新餐點失敗:', e);
+    }
+}
+
+async function addOrder(memberId) {
+    if (!currentGatheringId) return;
     
-    await db.collection('gatherings').doc(currentGatheringId).update({ [`orders.${member}`]: arr });
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        const arr = orders[memberId] || [];
+        
+        arr.push({ name: '', price: '' });
+        orders[memberId] = arr;
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            orders: orders
+        });
+    } catch (e) {
+        console.error('新增餐點失敗:', e);
+    }
 }
 
-async function addOrder(member) {
+async function removeOrder(memberId, index) {
     if (!currentGatheringId) return;
-    const doc = await db.collection('gatherings').doc(currentGatheringId).get();
-    const arr = doc.data().orders?.[member] || [];
-    arr.push({ name: '', price: '' });
-    await db.collection('gatherings').doc(currentGatheringId).update({ [`orders.${member}`]: arr });
-}
-
-async function removeOrder(member, index) {
-    if (!currentGatheringId) return;
-    const doc = await db.collection('gatherings').doc(currentGatheringId).get();
-    const arr = doc.data().orders?.[member] || [];
-    arr.splice(index, 1);
-    if (arr.length === 0) arr.push({ name: '', price: '' });
-    await db.collection('gatherings').doc(currentGatheringId).update({ [`orders.${member}`]: arr });
+    
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        const arr = orders[memberId] || [];
+        
+        arr.splice(index, 1);
+        if (arr.length === 0) arr.push({ name: '', price: '' });
+        orders[memberId] = arr;
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            orders: orders
+        });
+    } catch (e) {
+        console.error('移除餐點失敗:', e);
+    }
 }
 
 async function toggleOrderStatus() {
@@ -510,8 +580,10 @@ async function summarizeOrders(useAI) {
     familyGroups.forEach(g => {
         familyTotals[g.name] = 0;
         g.members.forEach(member => {
-            if (!attendees[member]) return;
-            const arr = orders[member] || [];
+            const memberId = member.id;
+            const memberName = member.name;
+            if (!attendees[memberId]) return;
+            const arr = orders[memberId] || [];
             const validOrders = arr.filter(o => o && o.name && o.name.trim());
             let memberTotal = 0;
             
@@ -521,7 +593,7 @@ async function summarizeOrders(useAI) {
             });
             
             if (validOrders.length > 0) {
-                memberDetails.push({ member, orders: validOrders, total: memberTotal, family: g.name });
+                memberDetails.push({ member: memberName, orders: validOrders, total: memberTotal, family: g.name });
                 familyTotals[g.name] += memberTotal;
             }
         });
@@ -572,7 +644,6 @@ ${itemList}`;
         
         if (jsonMatch) {
             const aiResult = JSON.parse(jsonMatch[0]);
-            // 合併結果
             const merged = aiResult.map(item => {
                 let count = 0, totalPrice = 0;
                 const originals = item.originalNames || [item.name];
@@ -612,7 +683,6 @@ function renderSummary(grouped, memberDetails, familyTotals, usedAI) {
     });
     html += `<div class="summary-total">共 ${grouped.reduce((s, i) => s + i.count, 0)} 份${grandTotal > 0 ? `，總計 $${grandTotal}` : ''}</div></div>`;
     
-    // 各家庭小計
     html += '<div class="summary-section"><h3>各家庭金額</h3>';
     Object.entries(familyTotals).forEach(([name, total]) => {
         if (total > 0) {
@@ -621,7 +691,6 @@ function renderSummary(grouped, memberDetails, familyTotals, usedAI) {
     });
     html += '</div>';
     
-    // 個人明細
     html += '<div class="summary-section"><h3>個人明細</h3>';
     memberDetails.forEach(d => {
         const items = d.orders.map(o => o.name + (o.price ? `($${o.price})` : '')).join('、');
@@ -643,13 +712,17 @@ function copySummary() {
     
     const items = [];
     let grandTotal = 0;
-    Object.entries(orders).forEach(([m, arr]) => {
-        if (attendees[m] && Array.isArray(arr)) {
-            arr.filter(o => o && o.name && o.name.trim()).forEach(o => {
-                items.push(o.name.trim());
-                grandTotal += parseInt(o.price) || 0;
-            });
-        }
+    
+    familyGroups.forEach(g => {
+        g.members.forEach(member => {
+            if (attendees[member.id]) {
+                const arr = orders[member.id] || [];
+                arr.filter(o => o && o.name && o.name.trim()).forEach(o => {
+                    items.push(o.name.trim());
+                    grandTotal += parseInt(o.price) || 0;
+                });
+            }
+        });
     });
     
     const grouped = simpleSummarize(items.map(name => ({ name, price: 0 })));
@@ -666,7 +739,7 @@ function copySummary() {
     });
 }
 
-// ===== 輪盤 (Canvas 重繪) =====
+// ===== 輪盤 =====
 function loadWheelOptions() {
     const saved = localStorage.getItem('wheelOptions');
     wheelOptions = saved ? JSON.parse(saved) : [];
@@ -734,7 +807,6 @@ function drawWheel(rotation = 0) {
     for (let i = 0; i < n; i++) {
         const angle = i * arc - Math.PI / 2;
         
-        // 扇形
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.arc(0, 0, radius, angle, angle + arc);
@@ -745,7 +817,6 @@ function drawWheel(rotation = 0) {
         ctx.lineWidth = 2;
         ctx.stroke();
         
-        // 文字
         ctx.save();
         ctx.rotate(angle + arc / 2);
         ctx.textAlign = 'right';
@@ -758,7 +829,6 @@ function drawWheel(rotation = 0) {
     
     ctx.restore();
     
-    // 中心圓
     ctx.beginPath();
     ctx.arc(center, center, 18, 0, Math.PI * 2);
     ctx.fillStyle = '#fdfcfa';
@@ -789,9 +859,8 @@ function spinWheel() {
     
     const n = wheelOptions.length;
     const arc = (Math.PI * 2) / n;
-    // 指針在頂部（-90度），計算要讓 winIndex 對準頂部
     const targetAngle = -winIndex * arc - arc / 2;
-    const spins = 5 * Math.PI * 2; // 5 圈
+    const spins = 5 * Math.PI * 2;
     const totalRotation = spins + targetAngle - (wheelAngle % (Math.PI * 2));
     
     const startAngle = wheelAngle;
@@ -801,7 +870,6 @@ function spinWheel() {
     function animate() {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
-        // ease out
         const eased = 1 - Math.pow(1 - progress, 3);
         wheelAngle = startAngle + totalRotation * eased;
         drawWheel(wheelAngle);
