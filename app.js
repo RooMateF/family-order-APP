@@ -376,14 +376,14 @@ function renderMember(member, attendees, orders, canEdit) {
                                 ${attending && canEdit ? '' : 'disabled'} 
                                 data-member-id="${memberId}" data-index="${i}"
                                 oninput="showMenuSuggestions(this)"
-                                onchange="updateSingleOrder('${memberId}', ${i}, 'name', this.value)"
+                                onblur="handleInputBlur(this, '${memberId}', ${i})"
                                 onfocus="showMenuSuggestions(this)">
                         </div>
                         <input type="number" class="order-price" placeholder="$" 
                             value="${o.price || ''}"
                             ${attending && canEdit ? '' : 'disabled'}
                             data-member-id="${memberId}" data-index="${i}"
-                            onchange="updateSingleOrder('${memberId}', ${i}, 'price', this.value)">
+                            onblur="updateSingleOrder('${memberId}', ${i}, 'price', this.value)">
                         ${display.length > 1 ? `<button class="btn-remove-order" onclick="removeOrder('${memberId}', ${i})" ${canEdit ? '' : 'disabled'}>×</button>` : ''}
                     </div>
                 `).join('')}
@@ -400,6 +400,8 @@ function toggleGroup(id) {
 }
 
 // ===== 菜單提示 =====
+let suggestionJustSelected = false;  // 標記是否剛剛選擇了選單項目
+
 function showMenuSuggestions(input) {
     const suggestions = document.getElementById('menu-suggestions');
     const value = input.value.trim().toLowerCase();
@@ -442,7 +444,7 @@ function showMenuSuggestions(input) {
     suggestions.style.width = Math.max(rect.width, 250) + 'px';
     
     suggestions.innerHTML = matches.slice(0, 8).map(item => `
-        <div class="menu-suggestion-item" onclick="selectSuggestion('${item.name.replace(/'/g, "\\'")}', ${item.price || 0})">
+        <div class="menu-suggestion-item" onmousedown="selectSuggestion('${item.name.replace(/'/g, "\\'")}', ${item.price || 0})" ontouchstart="selectSuggestion('${item.name.replace(/'/g, "\\'")}', ${item.price || 0})">
             <span>${item.name}</span>
             ${item.price ? `<span class="menu-suggestion-price">$${item.price}</span>` : ''}
         </div>
@@ -452,22 +454,29 @@ function showMenuSuggestions(input) {
 }
 
 function selectSuggestion(name, price) {
-    if (!activeSuggestionInput) return;
+    const input = activeSuggestionInput;
+    if (!input) return;
     
-    const memberId = activeSuggestionInput.dataset.memberId;
-    const index = activeSuggestionInput.dataset.index;
+    // 設定標記，防止 blur 事件重複處理
+    suggestionJustSelected = true;
     
-    // 設定餐點名稱
-    activeSuggestionInput.value = name;
+    const memberId = input.dataset.memberId;
+    const index = input.dataset.index;
     
-    // 找到對應的價格輸入框並設定價格
-    // 使用更精確的選擇器：找同一個 order-item 內的價格輸入框
-    const orderItem = activeSuggestionInput.closest('.order-item');
+    // 先隱藏選單
+    const suggestions = document.getElementById('menu-suggestions');
+    suggestions.classList.remove('show');
+    
+    // 找到對應的價格輸入框
+    const orderItem = input.closest('.order-item');
     const priceInput = orderItem ? orderItem.querySelector('input[type="number"]') : null;
     
-    console.log('選擇建議:', name, price);
-    console.log('價格輸入框:', priceInput);
+    console.log('選擇建議:', name, price, 'memberId:', memberId, 'index:', index);
     
+    // 設定餐點名稱
+    input.value = name;
+    
+    // 設定價格
     if (priceInput && price) {
         priceInput.value = price;
     }
@@ -478,9 +487,26 @@ function selectSuggestion(name, price) {
         updateSingleOrder(memberId, parseInt(index), 'price', price);
     }
     
-    // 隱藏選單
-    document.getElementById('menu-suggestions').classList.remove('show');
     activeSuggestionInput = null;
+    
+    // 100ms 後重置標記
+    setTimeout(() => {
+        suggestionJustSelected = false;
+    }, 100);
+}
+
+function handleInputBlur(input, memberId, index) {
+    // 如果剛剛選擇了選單項目，不要再處理 blur
+    if (suggestionJustSelected) {
+        return;
+    }
+    
+    // 延遲一點執行，確保選單點擊事件先處理
+    setTimeout(() => {
+        if (!suggestionJustSelected) {
+            updateSingleOrder(memberId, index, 'name', input.value);
+        }
+    }, 50);
 }
 
 // ===== 資料操作 - 使用整個物件更新避免中文路徑問題 =====
@@ -1071,3 +1097,4 @@ window.openMenuEditor = openMenuEditor;
 window.removeEditMenuItem = removeEditMenuItem;
 window.showMenuSuggestions = showMenuSuggestions;
 window.selectSuggestion = selectSuggestion;
+window.handleInputBlur = handleInputBlur;
