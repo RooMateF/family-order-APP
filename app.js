@@ -342,10 +342,22 @@ function renderFamilyGroups(attendees, orders, isClosed) {
         
         const count = group.members.filter(m => attendees[m.id]).length;
         let groupTotal = 0;
-        group.members.forEach(m => {
-            const memberOrders = orders[m.id] || [];
-            memberOrders.forEach(o => { if (o && o.price) groupTotal += parseInt(o.price) || 0; });
-        });
+        group.members.forEach(member => {
+    const li = document.createElement('li');
+    li.className = 'member-item';
+    
+    // 注意這裡：新增了 class="price-input" 的 input
+    li.innerHTML = `
+        <span class="member-name">${member.name}</span>
+        <div class="input-group">
+            <input type="text" id="input-${member.id}" placeholder="想吃什麼？" class="food-input">
+            <input type="number" id="price-${member.id}" placeholder="金額" class="price-input">
+            <button onclick="addOrder('${gatheringId}', '${member.id}', '${member.name}')">點餐</button>
+        </div>
+        <div id="orders-${member.id}" class="member-orders"></div>
+    `;
+    memberList.appendChild(li);
+});
         
         el.innerHTML = `
             <div class="group-header" onclick="toggleGroup('${group.id}')">
