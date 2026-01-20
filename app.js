@@ -1,737 +1,1365 @@
-/* ===== 基礎設定 ===== */
-root {
-    --bg-primary: #f7f4ef;
-    --bg-secondary: #ede8df;
-    --bg-card: #fdfcfa;
-    --text-primary: #3d3a35;
-    --text-secondary: #6b655a;
-    --text-light: #9a9285;
-    --border-color: #d5cfc3;
-    --border-dark: #b8ad9a;
-    --accent-ink: #4a5568;
-    --accent-wood: #8b7355;
-    --accent-bamboo: #6b8e5f;
-    --accent-rust: #a0522d;
-    --accent-stone: #708090;
-    --shadow-soft: 0 2px 8px rgba(61, 58, 53, 0.08);
-    --shadow-medium: 0 4px 16px rgba(61, 58, 53, 0.12);
-    --radius-sm: 4px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
+// ===== Firebase 設定 =====
+const firebaseConfig = {
+    apiKey: "AIzaSyCftNjFmb347SXmukXRiFhrEea0rxduI64",
+    authDomain: "family-order-app.firebaseapp.com",
+    projectId: "family-order-app",
+    storageBucket: "family-order-app.firebasestorage.app",
+    messagingSenderId: "172416471032",
+    appId: "1:172416471032:web:f16a0e0d82b1519f63500d"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ===== Gemini API =====
+const GEMINI_API_KEY = 'AIzaSyDOAsJRpYFsaCi76J-uLKJe4Luh0gx8iBg';
+
+// ===== 家庭成員 - 使用英文 ID =====
+const familyGroups = [
+    { id: 'grandparents', name: '阿公阿嬤', members: [
+        { id: 'm01', name: '陳惠舜' },
+        { id: 'm02', name: '林貞惠' }
+    ]},
+    { id: 'family1', name: '世松家', members: [
+        { id: 'm03', name: '陳世松' },
+        { id: 'm04', name: '張秋蓮' },
+        { id: 'm05', name: '陳昱臻' },
+        { id: 'm06', name: '陳昱瑋' }
+    ]},
+    { id: 'family2', name: '世賓家', members: [
+        { id: 'm07', name: '陳世賓' },
+        { id: 'm08', name: '鄭瑩' },
+        { id: 'm09', name: '陳昱婕' },
+        { id: 'm10', name: '陳宇' }
+    ]},
+    { id: 'family3', name: '慶龍家', members: [
+        { id: 'm11', name: '江慶龍' },
+        { id: 'm12', name: '陳怡君' },
+        { id: 'm13', name: '江柏宏' },
+        { id: 'm14', name: '江冠宏' }
+    ]},
+    { id: 'family4', name: '朝慶家', members: [
+        { id: 'm15', name: '陳朝慶' },
+        { id: 'm16', name: '陳一辰' },
+        { id: 'm17', name: '陳奕豪' }
+    ]}
+];
+
+// 建立快速查詢表
+const memberById = {};
+const memberNameById = {};
+familyGroups.forEach(g => {
+    g.members.forEach(m => {
+        memberById[m.id] = m;
+        memberNameById[m.id] = m.name;
+    });
+});
+
+const ADMIN_PASSWORD = '000000';
+const SUPER_ADMIN_PASSWORD = '66666666';
+
+// ===== 全域變數 =====
+let currentGatheringId = null;
+let currentGatheringData = null;
+let currentMenuData = null;
+let unsubscribe = null;
+let expandedGroups = new Set();
+let isSuperAdmin = false;
+let forcedWheelResult = null;
+let wheelOptions = [];
+let deleteTargetId = null;
+let deleteType = 'gathering';
+let menus = [];
+let currentEditMenuId = null;
+let editMenuItems = [];
+let activeSuggestionInput = null;
+
+const wheelColors = ['#4a5568', '#8b7355', '#6b8e5f', '#a0522d', '#708090', '#5d6d7e', '#7d6544', '#5a7a50', '#6a7b8c', '#7a6b5c'];
+
+// ===== DOM =====
+const screens = {
+    home: document.getElementById('home-screen'),
+    gathering: document.getElementById('gathering-screen'),
+    admin: document.getElementById('admin-screen'),
+    superAdmin: document.getElementById('super-admin-screen'),
+    menu: document.getElementById('menu-screen'),
+    menuEdit: document.getElementById('menu-edit-screen'),
+    aiReview: document.getElementById('ai-review-screen')
+};
+const modals = {
+    create: document.getElementById('create-modal'),
+    delete: document.getElementById('delete-modal'),
+    admin: document.getElementById('admin-modal'),
+    superAdmin: document.getElementById('super-admin-modal'),
+    summary: document.getElementById('summary-modal')
+};
+
+// AI 整理相關變數
+let aiMergeResults = [];
+let aiSingleResults = [];
+let originalOrdersForAI = [];
+
+function showScreen(name) {
+    Object.values(screens).forEach(s => s.classList.remove('active'));
+    screens[name].classList.add('active');
+}
+function showModal(name) { modals[name].classList.add('active'); }
+function hideModal(name) { modals[name].classList.remove('active'); }
+
+// ===== 初始化 =====
+document.addEventListener('DOMContentLoaded', () => {
+    loadGatherings();
+    loadWheelOptions();
+    loadMenus();
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    document.getElementById('create-gathering-btn').addEventListener('click', () => {
+        document.getElementById('gathering-date').valueAsDate = new Date();
+        updateMenuSelect();
+        showModal('create');
+    });
+    document.getElementById('cancel-create').addEventListener('click', () => hideModal('create'));
+    document.getElementById('create-form').addEventListener('submit', createGathering);
+    
+    document.getElementById('cancel-delete').addEventListener('click', () => hideModal('delete'));
+    document.getElementById('confirm-delete').addEventListener('click', confirmDelete);
+    
+    document.getElementById('admin-btn').addEventListener('click', () => showModal('admin'));
+    document.getElementById('cancel-admin').addEventListener('click', () => hideModal('admin'));
+    document.getElementById('admin-form').addEventListener('submit', adminLogin);
+    document.getElementById('admin-back-to-home').addEventListener('click', () => showScreen('home'));
+    
+    document.getElementById('cancel-super-admin').addEventListener('click', () => hideModal('superAdmin'));
+    document.getElementById('super-admin-form').addEventListener('submit', superAdminLogin);
+    document.getElementById('super-admin-back').addEventListener('click', () => { isSuperAdmin = false; showScreen('home'); });
+    document.getElementById('set-forced-result').addEventListener('click', setForcedResult);
+    document.getElementById('clear-forced-result').addEventListener('click', clearForcedResult);
+    
+    document.getElementById('back-to-home').addEventListener('click', () => {
+        if (unsubscribe) unsubscribe();
+        expandedGroups.clear();
+        showScreen('home');
+        loadGatherings();
+    });
+    document.getElementById('close-order-btn').addEventListener('click', toggleOrderStatus);
+    document.getElementById('summarize-btn').addEventListener('click', () => summarizeOrders(false));
+    document.getElementById('close-summary').addEventListener('click', () => hideModal('summary'));
+    document.getElementById('copy-summary').addEventListener('click', copySummary);
+    document.getElementById('ai-summarize-btn').addEventListener('click', openAIReviewScreen);
+    
+    // AI 整理頁面
+    document.getElementById('ai-review-back').addEventListener('click', () => {
+        showScreen('gathering');
+        showModal('summary');
+    });
+    document.getElementById('ai-review-cancel').addEventListener('click', () => {
+        showScreen('gathering');
+        showModal('summary');
+    });
+    document.getElementById('ai-review-apply').addEventListener('click', applyAIMerge);
+    
+    document.getElementById('add-wheel-option').addEventListener('click', addWheelOption);
+    document.getElementById('wheel-new-option').addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); addWheelOption(); } });
+    document.getElementById('spin-wheel-btn').addEventListener('click', spinWheel);
+    
+    document.getElementById('menu-manage-btn').addEventListener('click', () => { showScreen('menu'); renderMenuList(); });
+    document.getElementById('menu-back').addEventListener('click', () => showScreen('home'));
+    document.getElementById('create-menu-btn').addEventListener('click', () => openMenuEditor(null));
+    document.getElementById('menu-edit-back').addEventListener('click', () => { showScreen('menu'); renderMenuList(); });
+    document.getElementById('add-menu-item').addEventListener('click', addMenuItem);
+    document.getElementById('new-item-name').addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); addMenuItem(); } });
+    document.getElementById('save-menu-btn').addEventListener('click', saveMenu);
+    
+    Object.values(modals).forEach(modal => {
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+    });
+    
+    let clicks = 0, timer = null;
+    document.querySelector('.app-title').addEventListener('click', () => {
+        clicks++;
+        clearTimeout(timer);
+        timer = setTimeout(() => clicks = 0, 2000);
+        if (clicks >= 5) { clicks = 0; showModal('superAdmin'); }
+    });
+    
+    document.addEventListener('click', (e) => {
+        const suggestions = document.getElementById('menu-suggestions');
+        if (!e.target.classList.contains('order-input')) {
+            suggestions.classList.remove('show');
+        }
+    });
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-body {
-    font-family: 'Noto Serif TC', Georgia, serif;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    min-height: 100vh;
-    line-height: 1.8;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
+// ===== 聚餐列表 =====
+async function loadGatherings() {
+    const listEl = document.getElementById('gathering-list');
+    try {
+        const snapshot = await db.collection('gatherings').where('status', '==', 'active').orderBy('createdAt', 'desc').get();
+        if (snapshot.empty) {
+            listEl.innerHTML = '<p class="empty-message">目前沒有進行中的聚餐<br><span>點擊上方按鈕建立一個吧</span></p>';
+            return;
+        }
+        listEl.innerHTML = '';
+        snapshot.forEach(doc => listEl.appendChild(createGatheringCard(doc.id, doc.data(), false)));
+    } catch (error) {
+        console.error('載入失敗:', error);
+        listEl.innerHTML = '<p class="empty-message">載入失敗，請重新整理</p>';
+    }
 }
 
-body::before {
-    content: '';
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: radial-gradient(ellipse at 20% 0%, rgba(139, 115, 85, 0.08) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 100%, rgba(107, 142, 95, 0.06) 0%, transparent 50%);
-    pointer-events: none;
-    z-index: -1;
+function createGatheringCard(id, data, isAdmin) {
+    const card = document.createElement('div');
+    card.className = 'gathering-card';
+    const attending = countAttending(data.attendees || {});
+    const { count: orderCount, total: totalPrice } = countOrdersAndPrice(data.orders || {});
+    const isClosed = data.orderStatus === 'closed';
+    
+    let actionsHtml = '';
+    if (isAdmin) {
+        actionsHtml = `
+            <div class="gathering-card-actions">
+                <button class="btn btn-small btn-ghost" onclick="event.stopPropagation(); toggleGatheringStatus('${id}', '${data.status}')">${data.status === 'active' ? '封存' : '恢復'}</button>
+                <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); requestDelete('${id}', 'gathering')">刪除</button>
+            </div>`;
+    }
+    
+    card.innerHTML = `
+        <div class="gathering-card-header">
+            <div class="gathering-card-title">${data.name}</div>
+            ${isClosed ? '<span class="status-badge closed">已結單</span>' : ''}
+        </div>
+        <div class="gathering-card-info">${data.date}${data.restaurant ? ' · ' + data.restaurant : ''}</div>
+        <div class="gathering-card-stats">
+            <span>${attending} 人參加</span>
+            <span>${orderCount} 份餐點</span>
+            ${totalPrice > 0 ? `<span>$${totalPrice}</span>` : ''}
+        </div>
+        ${actionsHtml}
+    `;
+    card.addEventListener('click', () => openGathering(id));
+    return card;
 }
 
-.app-container {
-    max-width: 560px;
-    margin: 0 auto;
-    padding: 24px;
-    padding-bottom: 140px;
+function requestDelete(id, type) {
+    deleteTargetId = id;
+    deleteType = type;
+    showModal('delete');
 }
 
-.screen { display: none; }
-.screen.active { display: block; animation: fadeIn 0.4s ease; }
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+async function confirmDelete() {
+    if (!deleteTargetId) return;
+    try {
+        if (deleteType === 'gathering') {
+            await db.collection('gatherings').doc(deleteTargetId).delete();
+        } else if (deleteType === 'menu') {
+            menus = menus.filter(m => m.id !== deleteTargetId);
+            localStorage.setItem('familyMenus', JSON.stringify(menus));
+            renderMenuList();
+        }
+        hideModal('delete');
+        deleteTargetId = null;
+        loadGatherings();
+        if (screens.admin.classList.contains('active')) loadAdminGatherings();
+        if (screens.superAdmin.classList.contains('active')) loadSuperAdminGatherings();
+    } catch (e) { console.error('刪除失敗:', e); }
 }
 
-/* ===== 標題 ===== */
-.home-header { text-align: center; padding: 40px 0 32px; }
-.ink-decoration {
-    width: 60px; height: 2px;
-    background: linear-gradient(90deg, transparent, var(--accent-ink), transparent);
-    margin: 0 auto 16px;
-}
-.app-title {
-    font-size: 1.7rem; font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 6px; letter-spacing: 0.06em;
-    cursor: default; user-select: none;
-}
-.app-subtitle {
-    color: var(--text-secondary);
-    font-size: 0.9rem; font-weight: 300;
-    letter-spacing: 0.12em;
-}
-
-/* ===== 按鈕 ===== */
-.btn {
-    padding: 14px 24px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-color);
-    font-size: 0.95rem; font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: inherit;
-    letter-spacing: 0.04em;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    user-select: none;
-    -webkit-user-select: none;
+async function createGathering(e) {
+    e.preventDefault();
+    const name = document.getElementById('gathering-name').value.trim();
+    const date = document.getElementById('gathering-date').value;
+    const restaurant = document.getElementById('gathering-restaurant').value.trim();
+    const menuId = document.getElementById('gathering-menu').value;
+    
+    if (!name || !date) return alert('請填寫聚餐名稱和日期');
+    
+    try {
+        await db.collection('gatherings').add({
+            name, date, restaurant, menuId,
+            status: 'active', orderStatus: 'open',
+            attendees: {}, orders: {},
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        hideModal('create');
+        document.getElementById('create-form').reset();
+        loadGatherings();
+    } catch (e) { console.error('建立失敗:', e); alert('建立失敗'); }
 }
 
-.btn:active { transform: scale(0.98); }
-
-.btn-primary {
-    background: var(--accent-ink);
-    color: #fdfcfa;
-    border-color: var(--accent-ink);
-}
-.btn-primary:hover { background: #3d4a5c; }
-
-.btn-secondary {
-    background: var(--bg-card);
-    color: var(--accent-wood);
-    border-color: var(--accent-wood);
-}
-.btn-secondary:hover { background: var(--bg-secondary); }
-
-.btn-ghost {
-    background: transparent;
-    color: var(--text-secondary);
-}
-.btn-ghost:hover { background: var(--bg-secondary); }
-
-.btn-danger {
-    background: var(--accent-rust);
-    color: #fdfcfa;
-    border-color: var(--accent-rust);
+// ===== 聚餐詳情 =====
+function openGathering(id) {
+    currentGatheringId = id;
+    showScreen('gathering');
+    unsubscribe = db.collection('gatherings').doc(id).onSnapshot(doc => {
+        if (!doc.exists) { alert('聚餐不存在'); showScreen('home'); return; }
+        currentGatheringData = doc.data();
+        if (currentGatheringData.menuId) {
+            currentMenuData = menus.find(m => m.id === currentGatheringData.menuId) || null;
+        } else {
+            currentMenuData = null;
+        }
+        renderGatheringDetail(currentGatheringData);
+    });
 }
 
-.btn-large { width: 100%; padding: 16px; }
-.btn-small { padding: 10px 16px; font-size: 0.85rem; }
-
-/* ===== 區塊 ===== */
-.section { margin-top: 36px; }
-.section-title {
-    font-size: 0.85rem; font-weight: 500;
-    color: var(--text-light);
-    margin-bottom: 14px;
-    letter-spacing: 0.08em;
-}
-.section-title::before {
-    content: ''; display: inline-block;
-    width: 16px; height: 1px;
-    background: var(--border-dark);
-    margin-right: 10px;
-    vertical-align: middle;
-}
-
-/* ===== 聚餐列表 ===== */
-.gathering-list { display: flex; flex-direction: column; gap: 12px; }
-
-.gathering-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: 18px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: var(--shadow-soft);
-}
-.gathering-card:active { transform: scale(0.99); }
-
-.gathering-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 6px;
-}
-.gathering-card-title { font-size: 1.05rem; font-weight: 600; }
-.gathering-card-info { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 10px; }
-.gathering-card-stats { display: flex; gap: 16px; font-size: 0.85rem; color: var(--text-light); }
-
-.gathering-card-actions {
-    display: flex; gap: 8px;
-    margin-top: 12px; padding-top: 12px;
-    border-top: 1px solid var(--border-color);
+function renderGatheringDetail(data) {
+    document.getElementById('gathering-title').textContent = data.name;
+    document.getElementById('gathering-info').textContent = `${data.date}${data.restaurant ? ' · ' + data.restaurant : ''}`;
+    
+    const menuInfo = document.getElementById('gathering-menu-info');
+    if (currentMenuData) {
+        menuInfo.textContent = `使用菜單：${currentMenuData.name}`;
+        menuInfo.style.display = 'block';
+    } else {
+        menuInfo.style.display = 'none';
+    }
+    
+    const statusEl = document.getElementById('gathering-status');
+    const isClosed = data.orderStatus === 'closed';
+    statusEl.textContent = isClosed ? '已結單' : '點餐中';
+    statusEl.className = 'status-badge ' + (isClosed ? 'closed' : 'ordering');
+    
+    document.getElementById('close-order-btn').textContent = isClosed ? '重新開放' : '結束點餐';
+    
+    const { count: orderCount, total: totalPrice } = countOrdersAndPrice(data.orders || {});
+    document.getElementById('total-attending').textContent = countAttending(data.attendees || {});
+    document.getElementById('total-ordered').textContent = orderCount;
+    document.getElementById('total-price').textContent = '$' + totalPrice;
+    
+    renderFamilyGroups(data.attendees || {}, data.orders || {}, isClosed);
 }
 
-.empty-message {
-    text-align: center;
-    color: var(--text-secondary);
-    padding: 40px 20px;
-    background: var(--bg-card);
-    border-radius: var(--radius-md);
-    border: 1px dashed var(--border-color);
-    line-height: 2;
-}
-.empty-message span { font-size: 0.85rem; color: var(--text-light); }
-
-/* ===== 輪盤 ===== */
-.wheel-section {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: 20px;
-    box-shadow: var(--shadow-soft);
-}
-
-.wheel-options-area { margin-bottom: 20px; }
-.wheel-options-list {
-    display: flex; flex-wrap: wrap; gap: 8px;
-    margin-bottom: 10px; min-height: 32px;
-}
-.wheel-option-tag {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    font-size: 0.9rem;
-}
-.wheel-option-remove {
-    background: none; border: none;
-    color: var(--text-light);
-    cursor: pointer; padding: 0 2px;
-    font-size: 1.1rem; line-height: 1;
-}
-.wheel-option-remove:hover { color: var(--accent-rust); }
-
-.wheel-input-row { display: flex; gap: 8px; }
-.wheel-input {
-    flex: 1; padding: 12px 14px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    font-size: 0.95rem; font-family: inherit;
-    background: var(--bg-primary);
-}
-.wheel-input:focus { outline: none; border-color: var(--accent-ink); }
-
-.wheel-container {
-    position: relative;
-    display: flex; justify-content: center;
-    margin: 20px 0;
-}
-.wheel-pointer {
-    position: absolute;
-    top: -6px; left: 50%;
-    transform: translateX(-50%);
-    width: 0; height: 0;
-    border-left: 10px solid transparent;
-    border-right: 10px solid transparent;
-    border-top: 18px solid var(--accent-ink);
-    z-index: 10;
+function renderFamilyGroups(attendees, orders, isClosed) {
+    const container = document.getElementById('family-groups');
+    container.innerHTML = '';
+    const canEdit = !isClosed || isSuperAdmin;
+    
+    familyGroups.forEach(group => {
+        const el = document.createElement('div');
+        el.className = 'family-group' + (expandedGroups.has(group.id) ? ' expanded' : '');
+        el.id = `group-${group.id}`;
+        
+        const count = group.members.filter(m => attendees[m.id]).length;
+        let groupTotal = 0;
+        group.members.forEach(m => {
+            const memberOrders = orders[m.id] || [];
+            memberOrders.forEach(o => { if (o && o.price) groupTotal += parseInt(o.price) || 0; });
+        });
+        
+        el.innerHTML = `
+            <div class="group-header" onclick="toggleGroup('${group.id}')">
+                <div>
+                    <span class="group-title">${group.name}</span>
+                    <span class="group-count">（${count}/${group.members.length}）</span>
+                </div>
+                <span class="group-toggle">▼</span>
+            </div>
+            <div class="group-content">
+                ${group.members.map(m => renderMember(m, attendees, orders, canEdit)).join('')}
+                ${groupTotal > 0 ? `<div class="group-total">小計：$${groupTotal}</div>` : ''}
+            </div>
+        `;
+        container.appendChild(el);
+    });
 }
 
-#wheel-canvas {
-    border-radius: 50%;
-    box-shadow: 0 0 0 5px var(--bg-card), 0 0 0 7px var(--border-dark), var(--shadow-medium);
+function renderMember(member, attendees, orders, canEdit) {
+    const memberId = member.id;
+    const memberName = member.name;
+    const attending = attendees[memberId] || false;
+    const memberOrders = orders[memberId] || [];
+    const display = memberOrders.length > 0 ? memberOrders : [{ name: '', price: '' }];
+    
+    let memberTotal = 0;
+    memberOrders.forEach(o => { if (o && o.price) memberTotal += parseInt(o.price) || 0; });
+    
+    return `
+        <div class="member-item" data-member-id="${memberId}">
+            <div class="member-row">
+                <input type="checkbox" class="member-checkbox" ${attending ? 'checked' : ''} ${canEdit ? '' : 'disabled'}
+                    onchange="updateAttendance('${memberId}', this.checked)">
+                <span class="member-name">${memberName}</span>
+                <span class="member-status ${attending ? '' : 'not-attending'}">${attending ? '參加' : '未參加'}</span>
+                ${memberTotal > 0 ? `<span class="member-total">$${memberTotal}</span>` : ''}
+            </div>
+            <div class="orders-container">
+                ${display.map((o, i) => `
+                    <div class="order-item">
+                        <div class="order-input-wrapper">
+                            <input type="text" class="order-input" placeholder="輸入餐點..." 
+                                value="${o.name || ''}"
+                                ${attending && canEdit ? '' : 'disabled'} 
+                                data-member-id="${memberId}" data-index="${i}"
+                                oninput="showMenuSuggestions(this)"
+                                onchange="updateSingleOrder('${memberId}', ${i}, 'name', this.value)"
+                                onfocus="showMenuSuggestions(this)">
+                        </div>
+                        <input type="number" class="order-price" placeholder="$" 
+                            value="${o.price || ''}"
+                            ${attending && canEdit ? '' : 'disabled'}
+                            data-member-id="${memberId}" data-index="${i}"
+                            onchange="updateSingleOrder('${memberId}', ${i}, 'price', this.value)">
+                        ${display.length > 1 ? `<button class="btn-remove-order" onclick="removeOrder('${memberId}', ${i})" ${canEdit ? '' : 'disabled'}>×</button>` : ''}
+                    </div>
+                `).join('')}
+                <button class="btn-add-order" onclick="addOrder('${memberId}')" ${attending && canEdit ? '' : 'disabled'}>+ 新增餐點</button>
+            </div>
+        </div>
+    `;
 }
 
-.wheel-result {
-    text-align: center;
-    font-size: 1.15rem; font-weight: 600;
-    color: var(--accent-ink);
-    margin-top: 16px; padding: 14px;
-    background: var(--bg-secondary);
-    border-radius: var(--radius-sm);
-    display: none;
-}
-.wheel-result.show { display: block; animation: resultReveal 0.4s ease; }
-
-@keyframes resultReveal {
-    from { opacity: 0; transform: scale(0.95); }
-    to { opacity: 1; transform: scale(1); }
+function toggleGroup(id) {
+    const el = document.getElementById(`group-${id}`);
+    el.classList.toggle('expanded');
+    expandedGroups.has(id) ? expandedGroups.delete(id) : expandedGroups.add(id);
 }
 
-/* ===== Footer ===== */
-.footer-buttons {
-    margin-top: 40px;
-    display: flex; justify-content: center; gap: 12px;
-}
-.admin-btn { opacity: 0.6; font-size: 0.85rem; }
-.admin-btn:hover { opacity: 1; }
-
-/* ===== Modal ===== */
-.modal {
-    display: none;
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(61, 58, 53, 0.5);
-    backdrop-filter: blur(3px);
-    z-index: 1000;
-    align-items: center; justify-content: center;
-    padding: 20px;
-}
-.modal.active { display: flex; }
-
-.modal-content {
-    background: var(--bg-card);
-    border-radius: var(--radius-lg);
-    padding: 28px;
-    width: 100%; max-width: 400px;
-    max-height: 85vh; overflow-y: auto;
-    animation: modalIn 0.25s ease;
-    box-shadow: var(--shadow-medium);
-    border: 1px solid var(--border-color);
-}
-.modal-small { max-width: 340px; }
-.modal-large { max-width: 480px; }
-
-@keyframes modalIn {
-    from { opacity: 0; transform: scale(0.96) translateY(8px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
+// ===== 菜單提示 =====
+function showMenuSuggestions(input) {
+    const suggestions = document.getElementById('menu-suggestions');
+    const value = input.value.trim().toLowerCase();
+    
+    if (!currentMenuData || !currentMenuData.items || value.length === 0) {
+        suggestions.classList.remove('show');
+        return;
+    }
+    
+    const matches = currentMenuData.items.filter(item => 
+        item.name.toLowerCase().includes(value)
+    );
+    
+    if (matches.length === 0) {
+        suggestions.classList.remove('show');
+        return;
+    }
+    
+    activeSuggestionInput = input;
+    const rect = input.getBoundingClientRect();
+    suggestions.style.top = (rect.bottom + 4) + 'px';
+    suggestions.style.left = rect.left + 'px';
+    suggestions.style.width = rect.width + 'px';
+    
+    suggestions.innerHTML = matches.slice(0, 8).map(item => `
+        <div class="menu-suggestion-item" onclick="selectSuggestion('${item.name.replace(/'/g, "\\'")}', ${item.price || 0})">
+            <span>${item.name}</span>
+            ${item.price ? `<span class="menu-suggestion-price">$${item.price}</span>` : ''}
+        </div>
+    `).join('');
+    
+    suggestions.classList.add('show');
 }
 
-.modal-header { text-align: center; margin-bottom: 24px; }
-.modal-header h2 { font-size: 1.2rem; font-weight: 600; letter-spacing: 0.04em; }
-.modal-message { text-align: center; color: var(--text-secondary); margin-bottom: 20px; }
-
-/* ===== 表單 ===== */
-.form-group { margin-bottom: 18px; }
-.form-group label {
-    display: block;
-    font-size: 0.85rem; font-weight: 500;
-    margin-bottom: 6px;
-    color: var(--text-secondary);
-}
-.form-group input, .form-group select, .form-group textarea {
-    width: 100%; padding: 12px 14px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    font-size: 1rem; font-family: inherit;
-    background: var(--bg-primary);
-}
-.form-group input:focus, .form-group select:focus {
-    outline: none;
-    border-color: var(--accent-ink);
-}
-.form-group input::placeholder { color: var(--text-light); }
-
-.form-actions { display: flex; gap: 10px; margin-top: 24px; }
-.form-actions .btn { flex: 1; }
-
-.form-actions-vertical { display: flex; flex-direction: column; gap: 12px; }
-
-/* ===== 聚餐詳情 ===== */
-.gathering-header {
-    padding: 14px 0 20px;
-    border-bottom: 1px solid var(--border-color);
-    margin-bottom: 20px;
-}
-.back-btn {
-    background: none; border: none;
-    color: var(--accent-ink);
-    font-size: 0.9rem;
-    cursor: pointer; padding: 0;
-    margin-bottom: 10px;
-    font-family: inherit;
-}
-.gathering-title-row {
-    display: flex; align-items: center; gap: 10px;
-    margin-bottom: 6px;
-}
-.gathering-header h1 { font-size: 1.35rem; font-weight: 600; }
-
-.status-badge {
-    padding: 3px 10px;
-    font-size: 0.7rem; font-weight: 500;
-    border-radius: var(--radius-sm);
-}
-.status-badge.ordering {
-    background: rgba(107, 142, 95, 0.15);
-    color: var(--accent-bamboo);
-    border: 1px solid var(--accent-bamboo);
-}
-.status-badge.closed {
-    background: rgba(112, 128, 144, 0.15);
-    color: var(--accent-stone);
-    border: 1px solid var(--accent-stone);
+function selectSuggestion(name, price) {
+    if (!activeSuggestionInput) return;
+    
+    const memberId = activeSuggestionInput.dataset.memberId;
+    const index = parseInt(activeSuggestionInput.dataset.index);
+    
+    activeSuggestionInput.value = name;
+    
+    const priceInput = document.querySelector(`.order-price[data-member-id="${memberId}"][data-index="${index}"]`);
+    if (priceInput && price) {
+        priceInput.value = price;
+    }
+    
+    updateSingleOrder(memberId, index, 'name', name);
+    if (price) updateSingleOrder(memberId, index, 'price', price);
+    
+    document.getElementById('menu-suggestions').classList.remove('show');
+    activeSuggestionInput = null;
 }
 
-.gathering-info { color: var(--text-secondary); font-size: 0.9rem; }
-.gathering-menu-info { color: var(--accent-wood); font-size: 0.85rem; margin-top: 4px; }
-.admin-note { color: var(--text-light); font-size: 0.85rem; margin-top: 6px; }
-
-/* ===== 統計列 ===== */
-.stats-bar { display: flex; gap: 12px; margin-bottom: 24px; }
-.stat {
-    flex: 1;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: 14px 10px;
-    text-align: center;
-}
-.stat-label {
-    display: block;
-    font-size: 0.7rem;
-    color: var(--text-light);
-    margin-bottom: 2px;
-    letter-spacing: 0.06em;
-}
-.stat-number { font-size: 1.5rem; font-weight: 600; color: var(--accent-ink); }
-
-/* ===== 家庭分組 ===== */
-.family-groups { display: flex; flex-direction: column; gap: 14px; }
-.family-group {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-}
-.group-header {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 16px 18px;
-    background: var(--bg-secondary);
-    cursor: pointer;
-}
-.group-header:active { background: #e5e0d5; }
-.group-title { font-weight: 600; font-size: 1rem; }
-.group-count { font-size: 0.85rem; color: var(--text-light); margin-left: 8px; }
-.group-toggle { font-size: 0.85rem; color: var(--text-light); transition: transform 0.25s; }
-.family-group.expanded .group-toggle { transform: rotate(180deg); }
-.group-content { display: none; padding: 6px 18px 18px; }
-.family-group.expanded .group-content { display: block; }
-
-.group-total {
-    margin-top: 12px; padding-top: 12px;
-    border-top: 1px dashed var(--border-color);
-    text-align: right;
-    font-size: 0.9rem; color: var(--accent-wood);
+// ===== 資料操作 - 使用整個物件更新避免中文路徑問題 =====
+async function updateAttendance(memberId, attending) {
+    if (!currentGatheringId) return;
+    
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const attendees = data.attendees || {};
+        const orders = data.orders || {};
+        
+        attendees[memberId] = attending;
+        
+        if (!attending) {
+            delete orders[memberId];
+        } else {
+            orders[memberId] = [{ name: '', price: '' }];
+        }
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            attendees: attendees,
+            orders: orders
+        });
+    } catch (e) {
+        console.error('更新出席失敗:', e);
+    }
 }
 
-/* ===== 成員 ===== */
-.member-item { padding: 14px 0; border-bottom: 1px solid var(--border-color); }
-.member-item:last-child { border-bottom: none; }
-.member-row { display: flex; align-items: center; gap: 10px; }
-.member-checkbox {
-    width: 20px; height: 20px;
-    cursor: pointer;
-    accent-color: var(--accent-bamboo);
-}
-.member-checkbox:disabled { cursor: not-allowed; opacity: 0.5; }
-.member-name { flex: 1; font-weight: 500; font-size: 0.95rem; }
-.member-status {
-    font-size: 0.7rem; padding: 3px 8px;
-    border-radius: var(--radius-sm);
-    background: rgba(107, 142, 95, 0.15);
-    color: var(--accent-bamboo);
-}
-.member-status.not-attending { background: var(--bg-secondary); color: var(--text-light); }
-.member-total { font-size: 0.85rem; color: var(--accent-wood); margin-left: 8px; }
-
-/* ===== 餐點輸入 ===== */
-.orders-container { margin-top: 12px; margin-left: 30px; }
-.order-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: relative; }
-.order-input-wrapper { flex: 1; position: relative; }
-.order-input {
-    width: 100%; padding: 10px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    font-size: 0.9rem; font-family: inherit;
-    background: var(--bg-primary);
-}
-.order-input:focus { outline: none; border-color: var(--accent-ink); }
-.order-input:disabled { background: var(--bg-secondary); color: var(--text-light); cursor: not-allowed; }
-
-.order-price {
-    width: 80px; padding: 10px 8px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    font-size: 0.9rem; font-family: inherit;
-    background: var(--bg-primary);
-    text-align: right;
-}
-.order-price:focus { outline: none; border-color: var(--accent-ink); }
-.order-price:disabled { background: var(--bg-secondary); color: var(--text-light); }
-
-.btn-remove-order {
-    width: 30px; height: 30px; padding: 0;
-    border-radius: var(--radius-sm);
-    background: var(--bg-secondary);
-    color: var(--text-light);
-    border: 1px solid var(--border-color);
-    cursor: pointer; font-size: 1rem;
-    display: flex; align-items: center; justify-content: center;
-}
-.btn-remove-order:hover { background: var(--accent-rust); color: #fff; border-color: var(--accent-rust); }
-.btn-remove-order:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.btn-add-order {
-    width: 100%; padding: 10px;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    border: 1px dashed var(--border-color);
-    color: var(--text-secondary);
-    cursor: pointer; font-size: 0.9rem; font-family: inherit;
-}
-.btn-add-order:hover { border-color: var(--accent-ink); color: var(--accent-ink); }
-.btn-add-order:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* ===== 菜單提示 ===== */
-.menu-suggestions {
-    position: fixed;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-medium);
-    max-height: 200px;
-    overflow-y: auto;
-    z-index: 500;
-    display: none;
-}
-.menu-suggestions.show { display: block; }
-.menu-suggestion-item {
-    padding: 10px 14px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    border-bottom: 1px solid var(--border-color);
-    display: flex; justify-content: space-between;
-}
-.menu-suggestion-item:last-child { border-bottom: none; }
-.menu-suggestion-item:hover { background: var(--bg-secondary); }
-.menu-suggestion-price { color: var(--accent-wood); }
-
-/* ===== 底部操作 ===== */
-.bottom-actions {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    padding: 14px 20px;
-    background: rgba(247, 244, 239, 0.95);
-    backdrop-filter: blur(6px);
-    border-top: 1px solid var(--border-color);
-    display: flex; gap: 10px; justify-content: center;
-}
-.bottom-actions .btn { max-width: 240px; flex: 1; }
-
-.bottom-actions-static {
-    margin-top: 24px; padding: 16px 0;
+async function updateSingleOrder(memberId, index, field, value) {
+    if (!currentGatheringId) return;
+    
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        const arr = orders[memberId] || [{ name: '', price: '' }];
+        
+        if (!arr[index]) arr[index] = { name: '', price: '' };
+        arr[index][field] = field === 'price' ? (value ? parseInt(value) : '') : value.trim();
+        
+        orders[memberId] = arr;
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            orders: orders
+        });
+    } catch (e) {
+        console.error('更新餐點失敗:', e);
+    }
 }
 
-/* ===== 統計結果 ===== */
-.summary-content {
-    background: var(--bg-secondary);
-    border-radius: var(--radius-sm);
-    padding: 18px;
-    margin-bottom: 16px;
-    max-height: 380px;
-    overflow-y: auto;
-    border: 1px solid var(--border-color);
-}
-.summary-section { margin-bottom: 20px; }
-.summary-section:last-child { margin-bottom: 0; }
-.summary-section h3 {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin-bottom: 10px; padding-bottom: 6px;
-    border-bottom: 1px solid var(--border-color);
-    font-weight: 500;
-}
-.summary-item {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px dashed var(--border-color);
-}
-.summary-item:last-child { border-bottom: none; }
-.summary-item-name { font-weight: 500; }
-.summary-item-count {
-    color: #fff; font-weight: 600;
-    background: var(--accent-ink);
-    padding: 3px 12px;
-    border-radius: var(--radius-sm);
-    font-size: 0.85rem;
-}
-.summary-item-price { color: var(--accent-wood); font-weight: 500; margin-left: 8px; }
-.summary-total {
-    margin-top: 16px; padding-top: 12px;
-    border-top: 2px solid var(--accent-ink);
-    font-size: 1.05rem; font-weight: 600;
-    text-align: right;
+async function addOrder(memberId) {
+    if (!currentGatheringId) return;
+    
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        const arr = orders[memberId] || [];
+        
+        arr.push({ name: '', price: '' });
+        orders[memberId] = arr;
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            orders: orders
+        });
+    } catch (e) {
+        console.error('新增餐點失敗:', e);
+    }
 }
 
-/* ===== 菜單管理 ===== */
-.menu-actions-row { margin-bottom: 16px; }
-
-.menu-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: 16px;
-    margin-bottom: 10px;
-}
-.menu-card-title { font-weight: 600; margin-bottom: 4px; }
-.menu-card-info { font-size: 0.85rem; color: var(--text-secondary); }
-.menu-card-actions { display: flex; gap: 8px; margin-top: 10px; }
-
-.menu-items-list { margin-bottom: 16px; }
-.menu-item-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border-color);
-}
-.menu-item-row:last-child { border-bottom: none; }
-.menu-item-name { flex: 1; }
-.menu-item-price { color: var(--accent-wood); width: 70px; text-align: right; }
-
-.menu-item-add {
-    display: flex; gap: 8px;
-    padding: 12px;
-    background: var(--bg-secondary);
-    border-radius: var(--radius-sm);
-}
-.menu-item-add input {
-    flex: 1; padding: 10px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    font-family: inherit;
-}
-.menu-item-add input[type="number"] { width: 80px; flex: none; }
-
-/* ===== 超級管理員 ===== */
-.super-admin-section {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: 18px;
-}
-.super-admin-section .btn { margin-right: 8px; margin-top: 8px; }
-.status-text { margin-top: 10px; font-size: 0.85rem; color: var(--accent-bamboo); }
-
-/* ===== AI 整理頁面 ===== */
-.ai-loading {
-    text-align: center;
-    padding: 60px 20px;
-}
-.loading-spinner {
-    width: 40px; height: 40px;
-    border: 3px solid var(--border-color);
-    border-top-color: var(--accent-ink);
-    border-radius: 50%;
-    margin: 0 auto 16px;
-    animation: spin 1s linear infinite;
-}
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-.ai-loading p { color: var(--text-secondary); }
-
-.ai-review-content { padding-bottom: 100px; }
-.ai-hint {
-    font-size: 0.85rem;
-    color: var(--text-light);
-    margin-bottom: 16px;
-    padding: 12px;
-    background: var(--bg-secondary);
-    border-radius: var(--radius-sm);
+async function removeOrder(memberId, index) {
+    if (!currentGatheringId) return;
+    
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        const arr = orders[memberId] || [];
+        
+        arr.splice(index, 1);
+        if (arr.length === 0) arr.push({ name: '', price: '' });
+        orders[memberId] = arr;
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            orders: orders
+        });
+    } catch (e) {
+        console.error('移除餐點失敗:', e);
+    }
 }
 
-.ai-merge-list, .ai-single-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+async function toggleOrderStatus() {
+    if (!currentGatheringId || !currentGatheringData) return;
+    const newStatus = currentGatheringData.orderStatus === 'closed' ? 'open' : 'closed';
+    await db.collection('gatherings').doc(currentGatheringId).update({ orderStatus: newStatus });
 }
 
-.ai-merge-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: 16px;
-    box-shadow: var(--shadow-soft);
+function countAttending(a) { return Object.values(a).filter(v => v).length; }
+
+function countOrdersAndPrice(orders) {
+    let count = 0, total = 0;
+    Object.values(orders).forEach(arr => {
+        if (Array.isArray(arr)) {
+            arr.forEach(o => {
+                if (o && o.name && o.name.trim()) {
+                    count++;
+                    if (o.price) total += parseInt(o.price) || 0;
+                }
+            });
+        }
+    });
+    return { count, total };
 }
 
-.ai-merge-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-}
-.ai-merge-header label {
-    font-size: 0.8rem;
-    color: var(--text-light);
-    white-space: nowrap;
-}
-.ai-merge-input {
-    flex: 1;
-    padding: 10px 12px;
-    border: 1px solid var(--accent-ink);
-    border-radius: var(--radius-sm);
-    font-size: 0.95rem;
-    font-family: inherit;
-    background: var(--bg-primary);
-    font-weight: 500;
-}
-.ai-merge-input:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(74, 85, 104, 0.2);
-}
-.ai-merge-price {
-    font-size: 0.9rem;
-    color: var(--accent-wood);
-    font-weight: 500;
-}
-
-.ai-merge-items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-.ai-merge-item {
-    font-size: 0.8rem;
-    padding: 4px 10px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-}
-.ai-merge-item-count {
-    color: var(--accent-ink);
-    font-weight: 600;
-    margin-left: 4px;
+// ===== 統計（不使用 AI）=====
+async function summarizeOrders(useAI) {
+    const data = currentGatheringData;
+    if (!data) return;
+    const orders = data.orders || {};
+    const attendees = data.attendees || {};
+    
+    const allItems = [];
+    const memberDetails = [];
+    const familyTotals = {};
+    
+    familyGroups.forEach(g => {
+        familyTotals[g.name] = 0;
+        g.members.forEach(member => {
+            const memberId = member.id;
+            const memberName = member.name;
+            if (!attendees[memberId]) return;
+            const arr = orders[memberId] || [];
+            const validOrders = arr.filter(o => o && o.name && o.name.trim());
+            let memberTotal = 0;
+            
+            validOrders.forEach(o => {
+                allItems.push({ name: o.name.trim(), price: o.price || 0 });
+                if (o.price) memberTotal += parseInt(o.price) || 0;
+            });
+            
+            if (validOrders.length > 0) {
+                memberDetails.push({ member: memberName, orders: validOrders, total: memberTotal, family: g.name });
+                familyTotals[g.name] += memberTotal;
+            }
+        });
+    });
+    
+    const grouped = simpleSummarize(allItems);
+    renderSummary(grouped, memberDetails, familyTotals, false);
+    showModal('summary');
 }
 
-.ai-single-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+function simpleSummarize(items) {
+    const map = {};
+    items.forEach(item => {
+        const key = item.name;
+        if (!map[key]) map[key] = { count: 0, totalPrice: 0 };
+        map[key].count++;
+        map[key].totalPrice += parseInt(item.price) || 0;
+    });
+    return Object.entries(map).map(([name, data]) => ({ name, count: data.count, totalPrice: data.totalPrice })).sort((a, b) => b.count - a.count);
 }
-.ai-single-name { font-weight: 500; }
-.ai-single-info {
-    display: flex;
-    gap: 12px;
-    font-size: 0.85rem;
-}
-.ai-single-count { color: var(--accent-ink); }
-.ai-single-price { color: var(--accent-wood); }
 
-/* ===== 響應式 ===== */
-@media (max-width: 480px) {
-    .app-container { padding: 16px; }
-    .app-title { font-size: 1.5rem; }
-    .stats-bar { gap: 8px; }
-    .stat { padding: 12px 8px; }
-    .stat-number { font-size: 1.3rem; }
-    .orders-container { margin-left: 0; margin-top: 10px; }
-    .order-price { width: 70px; }
-    .bottom-actions { flex-direction: column; gap: 8px; }
-    .bottom-actions .btn { max-width: none; }
+// ===== AI 整理頁面 =====
+async function openAIReviewScreen() {
+    hideModal('summary');
+    showScreen('aiReview');
+    
+    // 顯示載入中
+    document.getElementById('ai-review-loading').style.display = 'block';
+    document.getElementById('ai-review-content').style.display = 'none';
+    
+    // 收集所有餐點
+    const data = currentGatheringData;
+    const orders = data.orders || {};
+    const attendees = data.attendees || {};
+    
+    originalOrdersForAI = [];
+    familyGroups.forEach(g => {
+        g.members.forEach(member => {
+            if (!attendees[member.id]) return;
+            const arr = orders[member.id] || [];
+            arr.forEach((o, idx) => {
+                if (o && o.name && o.name.trim()) {
+                    originalOrdersForAI.push({
+                        memberId: member.id,
+                        memberName: member.name,
+                        index: idx,
+                        name: o.name.trim(),
+                        price: o.price || 0
+                    });
+                }
+            });
+        });
+    });
+    
+    if (originalOrdersForAI.length === 0) {
+        alert('沒有餐點可以整理');
+        showScreen('gathering');
+        showModal('summary');
+        return;
+    }
+    
+    // 呼叫 AI
+    if (GEMINI_API_KEY && GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY_HERE') {
+        await callAIForMerge();
+    } else {
+        alert('請先設定 Gemini API Key');
+        showScreen('gathering');
+        showModal('summary');
+    }
 }
+
+async function callAIForMerge() {
+    // 準備餐點清單，包含價格資訊
+    const itemsWithPrice = originalOrdersForAI.map(o => `${o.name} ($${o.price})`).join('\n');
+    
+    const prompt = `你是餐廳餐點整理助手。請分析以下餐點清單，找出可能是同一道餐點但名稱不同的項目並合併。
+
+判斷標準：
+1. 關鍵字相似：例如「明太子干貝義大利麵」、「明太子干貝麵」、「明太子干貝意大利麵」應該合併
+2. 同義詞：「義大利麵」=「意大利麵」=「pasta」；「燉飯」=「飯」
+3. 順序不同：「青醬雞肉燉飯」=「雞肉青醬燉飯」
+4. 價格參考：相同或相近的價格可以作為輔助判斷依據
+
+請回傳 JSON 格式：
+{
+  "mergeGroups": [
+    {
+      "unifiedName": "統一後的標準名稱",
+      "price": 最常見的價格,
+      "originalNames": ["原始名稱1", "原始名稱2", ...]
+    }
+  ],
+  "singleItems": [
+    {
+      "name": "不需合併的餐點名稱",
+      "price": 價格
+    }
+  ]
+}
+
+注意：
+- 只回傳 JSON，不要其他文字
+- 每個原始餐點只能出現在一個群組中
+- 如果一個餐點沒有相似項目，放在 singleItems 中
+- unifiedName 應該選擇最完整、最清楚的名稱
+
+餐點清單：
+${itemsWithPrice}`;
+
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        
+        const result = await response.json();
+        console.log('AI Response:', result);
+        
+        // 檢查 API 錯誤
+        if (result.error) {
+            throw new Error(result.error.message || 'API 錯誤');
+        }
+        
+        // 檢查是否有回應
+        if (!result.candidates || result.candidates.length === 0) {
+            console.log('完整回應:', JSON.stringify(result, null, 2));
+            throw new Error('AI 沒有回應內容');
+        }
+        
+        const text = result.candidates[0]?.content?.parts?.[0]?.text || '';
+        console.log('AI 回應文字:', text);
+        
+        if (!text) {
+            throw new Error('AI 回應為空');
+        }
+        
+        // 嘗試解析 JSON
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        
+        if (jsonMatch) {
+            try {
+                const aiResult = JSON.parse(jsonMatch[0]);
+                processAIResult(aiResult);
+            } catch (parseError) {
+                console.error('JSON 解析失敗:', parseError);
+                console.log('嘗試解析的文字:', jsonMatch[0]);
+                throw new Error('JSON 格式錯誤');
+            }
+        } else {
+            console.log('找不到 JSON，原始回應:', text);
+            throw new Error('AI 回應中找不到 JSON 格式');
+        }
+    } catch (e) {
+        console.error('AI 整理失敗:', e);
+        alert('AI 整理失敗：' + e.message + '\n\n請檢查瀏覽器 Console 獲取更多資訊');
+        showScreen('gathering');
+        showModal('summary');
+    }
+}
+
+function processAIResult(aiResult) {
+    aiMergeResults = [];
+    aiSingleResults = [];
+    
+    // 處理合併群組
+    if (aiResult.mergeGroups && Array.isArray(aiResult.mergeGroups)) {
+        aiResult.mergeGroups.forEach((group, idx) => {
+            if (group.originalNames && group.originalNames.length > 1) {
+                // 計算每個原始名稱的數量
+                const itemCounts = {};
+                group.originalNames.forEach(origName => {
+                    const matches = originalOrdersForAI.filter(o => 
+                        o.name.toLowerCase() === origName.toLowerCase() ||
+                        o.name === origName
+                    );
+                    if (matches.length > 0) {
+                        itemCounts[origName] = matches.length;
+                    }
+                });
+                
+                if (Object.keys(itemCounts).length > 0) {
+                    aiMergeResults.push({
+                        id: 'merge_' + idx,
+                        unifiedName: group.unifiedName,
+                        price: group.price || 0,
+                        items: itemCounts
+                    });
+                }
+            }
+        });
+    }
+    
+    // 處理不需合併的項目
+    if (aiResult.singleItems && Array.isArray(aiResult.singleItems)) {
+        aiResult.singleItems.forEach(item => {
+            const matches = originalOrdersForAI.filter(o => 
+                o.name.toLowerCase() === item.name.toLowerCase() ||
+                o.name === item.name
+            );
+            if (matches.length > 0) {
+                aiSingleResults.push({
+                    name: item.name,
+                    price: item.price || matches[0].price || 0,
+                    count: matches.length
+                });
+            }
+        });
+    }
+    
+    // 找出 AI 沒有處理到的項目
+    const processedNames = new Set();
+    aiMergeResults.forEach(m => {
+        Object.keys(m.items).forEach(name => processedNames.add(name.toLowerCase()));
+    });
+    aiSingleResults.forEach(s => processedNames.add(s.name.toLowerCase()));
+    
+    originalOrdersForAI.forEach(o => {
+        if (!processedNames.has(o.name.toLowerCase())) {
+            const existing = aiSingleResults.find(s => s.name.toLowerCase() === o.name.toLowerCase());
+            if (!existing) {
+                const count = originalOrdersForAI.filter(x => x.name.toLowerCase() === o.name.toLowerCase()).length;
+                aiSingleResults.push({
+                    name: o.name,
+                    price: o.price,
+                    count: count
+                });
+                processedNames.add(o.name.toLowerCase());
+            }
+        }
+    });
+    
+    renderAIReviewContent();
+}
+
+function renderAIReviewContent() {
+    document.getElementById('ai-review-loading').style.display = 'none';
+    document.getElementById('ai-review-content').style.display = 'block';
+    
+    // 渲染合併群組
+    const mergeList = document.getElementById('ai-merge-list');
+    if (aiMergeResults.length === 0) {
+        mergeList.innerHTML = '<p style="color:#9a9285;text-align:center;padding:20px;">AI 未發現需要合併的餐點</p>';
+    } else {
+        mergeList.innerHTML = aiMergeResults.map((group, idx) => {
+            const totalCount = Object.values(group.items).reduce((a, b) => a + b, 0);
+            return `
+                <div class="ai-merge-card" data-merge-id="${group.id}">
+                    <div class="ai-merge-header">
+                        <label>統一名稱：</label>
+                        <input type="text" class="ai-merge-input" value="${group.unifiedName}" data-merge-idx="${idx}">
+                        <span class="ai-merge-price">x${totalCount}</span>
+                    </div>
+                    <div class="ai-merge-items">
+                        ${Object.entries(group.items).map(([name, count]) => 
+                            `<span class="ai-merge-item">${name}<span class="ai-merge-item-count">x${count}</span></span>`
+                        ).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    // 渲染不需合併的項目
+    const singleList = document.getElementById('ai-single-list');
+    if (aiSingleResults.length === 0) {
+        singleList.innerHTML = '<p style="color:#9a9285;text-align:center;padding:20px;">無</p>';
+    } else {
+        singleList.innerHTML = aiSingleResults.map(item => `
+            <div class="ai-single-item">
+                <span class="ai-single-name">${item.name}</span>
+                <div class="ai-single-info">
+                    <span class="ai-single-count">x${item.count}</span>
+                    ${item.price ? `<span class="ai-single-price">$${item.price}</span>` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+async function applyAIMerge() {
+    if (aiMergeResults.length === 0) {
+        alert('沒有需要合併的項目');
+        showScreen('gathering');
+        showModal('summary');
+        return;
+    }
+    
+    // 收集使用者修改後的統一名稱
+    const inputs = document.querySelectorAll('.ai-merge-input');
+    inputs.forEach((input, idx) => {
+        aiMergeResults[idx].unifiedName = input.value.trim();
+    });
+    
+    // 建立名稱對應表
+    const nameMapping = {};
+    aiMergeResults.forEach(group => {
+        Object.keys(group.items).forEach(originalName => {
+            nameMapping[originalName.toLowerCase()] = group.unifiedName;
+        });
+    });
+    
+    // 更新資料庫中的餐點名稱
+    try {
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        
+        let changeCount = 0;
+        
+        Object.keys(orders).forEach(memberId => {
+            const arr = orders[memberId];
+            if (Array.isArray(arr)) {
+                arr.forEach(order => {
+                    if (order && order.name) {
+                        const lowerName = order.name.trim().toLowerCase();
+                        if (nameMapping[lowerName]) {
+                            order.name = nameMapping[lowerName];
+                            changeCount++;
+                        }
+                    }
+                });
+            }
+        });
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({ orders: orders });
+        
+        alert(`已統一 ${changeCount} 筆餐點名稱！`);
+        showScreen('gathering');
+        
+    } catch (e) {
+        console.error('更新失敗:', e);
+        alert('更新失敗：' + e.message);
+    }
+}
+
+function renderSummary(grouped, memberDetails, familyTotals, usedAI) {
+    const container = document.getElementById('summary-content');
+    const grandTotal = Object.values(familyTotals).reduce((a, b) => a + b, 0);
+    
+    if (grouped.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#9a9285;padding:20px;">尚無餐點資料</p>';
+        return;
+    }
+    
+    let html = `<div class="summary-section"><h3>餐點統計${usedAI ? '（AI 整理）' : ''}</h3>`;
+    grouped.forEach(i => {
+        html += `<div class="summary-item">
+            <span class="summary-item-name">${i.name}</span>
+            <div>
+                <span class="summary-item-count">x ${i.count}</span>
+                ${i.totalPrice > 0 ? `<span class="summary-item-price">$${i.totalPrice}</span>` : ''}
+            </div>
+        </div>`;
+    });
+    html += `<div class="summary-total">共 ${grouped.reduce((s, i) => s + i.count, 0)} 份${grandTotal > 0 ? `，總計 $${grandTotal}` : ''}</div></div>`;
+    
+    html += '<div class="summary-section"><h3>各家庭金額</h3>';
+    Object.entries(familyTotals).forEach(([name, total]) => {
+        if (total > 0) {
+            html += `<div class="summary-item"><span class="summary-item-name">${name}</span><span class="summary-item-price">$${total}</span></div>`;
+        }
+    });
+    html += '</div>';
+    
+    html += '<div class="summary-section"><h3>個人明細</h3>';
+    memberDetails.forEach(d => {
+        const items = d.orders.map(o => o.name + (o.price ? `($${o.price})` : '')).join('、');
+        html += `<div class="summary-item">
+            <span class="summary-item-name">${d.member}</span>
+            <span style="color:#6b655a;font-size:0.85rem;">${items}${d.total > 0 ? ` = $${d.total}` : ''}</span>
+        </div>`;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+function copySummary() {
+    const data = currentGatheringData;
+    if (!data) return;
+    const orders = data.orders || {};
+    const attendees = data.attendees || {};
+    
+    const items = [];
+    let grandTotal = 0;
+    
+    familyGroups.forEach(g => {
+        g.members.forEach(member => {
+            if (attendees[member.id]) {
+                const arr = orders[member.id] || [];
+                arr.filter(o => o && o.name && o.name.trim()).forEach(o => {
+                    items.push(o.name.trim());
+                    grandTotal += parseInt(o.price) || 0;
+                });
+            }
+        });
+    });
+    
+    const grouped = simpleSummarize(items.map(name => ({ name, price: 0 })));
+    let text = `${data.name}\n${data.date}${data.restaurant ? ' · ' + data.restaurant : ''}\n\n餐點統計：\n`;
+    grouped.forEach(i => text += `- ${i.name} x ${i.count}\n`);
+    text += `\n共 ${grouped.reduce((s, i) => s + i.count, 0)} 份`;
+    if (grandTotal > 0) text += `，總計 $${grandTotal}`;
+    
+    navigator.clipboard.writeText(text).then(() => alert('已複製')).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta);
+        ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta); alert('已複製');
+    });
+}
+
+// ===== 輪盤 =====
+function loadWheelOptions() {
+    const saved = localStorage.getItem('wheelOptions');
+    wheelOptions = saved ? JSON.parse(saved) : [];
+    renderWheelOptions();
+    drawWheel();
+}
+
+function saveWheelOptions() {
+    localStorage.setItem('wheelOptions', JSON.stringify(wheelOptions));
+}
+
+function renderWheelOptions() {
+    const list = document.getElementById('wheel-options-list');
+    list.innerHTML = wheelOptions.map((opt, i) => `
+        <span class="wheel-option-tag">${opt}<button class="wheel-option-remove" onclick="removeWheelOption(${i})">×</button></span>
+    `).join('');
+}
+
+function addWheelOption() {
+    const input = document.getElementById('wheel-new-option');
+    const val = input.value.trim();
+    if (!val) return;
+    wheelOptions.push(val);
+    saveWheelOptions();
+    renderWheelOptions();
+    drawWheel();
+    input.value = '';
+}
+
+function removeWheelOption(i) {
+    wheelOptions.splice(i, 1);
+    saveWheelOptions();
+    renderWheelOptions();
+    drawWheel();
+}
+
+function drawWheel(rotation = 0) {
+    const canvas = document.getElementById('wheel-canvas');
+    const ctx = canvas.getContext('2d');
+    const size = canvas.width;
+    const center = size / 2;
+    const radius = center - 5;
+    
+    ctx.clearRect(0, 0, size, size);
+    
+    if (wheelOptions.length === 0) {
+        ctx.fillStyle = '#ede8df';
+        ctx.beginPath();
+        ctx.arc(center, center, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#9a9285';
+        ctx.font = '14px "Noto Serif TC"';
+        ctx.textAlign = 'center';
+        ctx.fillText('請新增選項', center, center);
+        return;
+    }
+    
+    const n = wheelOptions.length;
+    const arc = (Math.PI * 2) / n;
+    
+    ctx.save();
+    ctx.translate(center, center);
+    ctx.rotate(rotation);
+    
+    for (let i = 0; i < n; i++) {
+        const angle = i * arc - Math.PI / 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, radius, angle, angle + arc);
+        ctx.closePath();
+        ctx.fillStyle = wheelColors[i % wheelColors.length];
+        ctx.fill();
+        ctx.strokeStyle = '#fdfcfa';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.save();
+        ctx.rotate(angle + arc / 2);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#fdfcfa';
+        ctx.font = '500 13px "Noto Serif TC"';
+        const text = wheelOptions[i].length > 8 ? wheelOptions[i].slice(0, 8) + '...' : wheelOptions[i];
+        ctx.fillText(text, radius - 15, 5);
+        ctx.restore();
+    }
+    
+    ctx.restore();
+    
+    ctx.beginPath();
+    ctx.arc(center, center, 18, 0, Math.PI * 2);
+    ctx.fillStyle = '#fdfcfa';
+    ctx.fill();
+    ctx.strokeStyle = '#b8ad9a';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+}
+
+let wheelAngle = 0;
+let wheelSpinning = false;
+
+function spinWheel() {
+    if (wheelOptions.length < 2) return alert('請至少新增 2 個選項');
+    if (wheelSpinning) return;
+    
+    wheelSpinning = true;
+    const result = document.getElementById('wheel-result');
+    result.classList.remove('show');
+    
+    let winIndex;
+    if (forcedWheelResult) {
+        winIndex = wheelOptions.findIndex(o => o === forcedWheelResult);
+        if (winIndex === -1) winIndex = Math.floor(Math.random() * wheelOptions.length);
+    } else {
+        winIndex = Math.floor(Math.random() * wheelOptions.length);
+    }
+    
+    const n = wheelOptions.length;
+    const arc = (Math.PI * 2) / n;
+    const targetAngle = -winIndex * arc - arc / 2;
+    const spins = 5 * Math.PI * 2;
+    const totalRotation = spins + targetAngle - (wheelAngle % (Math.PI * 2));
+    
+    const startAngle = wheelAngle;
+    const startTime = Date.now();
+    const duration = 4000;
+    
+    function animate() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        wheelAngle = startAngle + totalRotation * eased;
+        drawWheel(wheelAngle);
+        
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        } else {
+            wheelSpinning = false;
+            result.textContent = `結果：${wheelOptions[winIndex]}`;
+            result.classList.add('show');
+        }
+    }
+    
+    animate();
+}
+
+function setForcedResult() {
+    const val = document.getElementById('forced-wheel-result').value.trim();
+    if (!val) return;
+    forcedWheelResult = val;
+    document.getElementById('forced-result-status').textContent = `已設定：${val}`;
+}
+
+function clearForcedResult() {
+    forcedWheelResult = null;
+    document.getElementById('forced-wheel-result').value = '';
+    document.getElementById('forced-result-status').textContent = '已清除';
+}
+
+// ===== 菜單管理 =====
+function loadMenus() {
+    const saved = localStorage.getItem('familyMenus');
+    menus = saved ? JSON.parse(saved) : [];
+}
+
+function saveMenus() {
+    localStorage.setItem('familyMenus', JSON.stringify(menus));
+}
+
+function updateMenuSelect() {
+    const select = document.getElementById('gathering-menu');
+    select.innerHTML = '<option value="">不使用菜單</option>' + 
+        menus.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+}
+
+function renderMenuList() {
+    const list = document.getElementById('menu-list');
+    if (menus.length === 0) {
+        list.innerHTML = '<p class="empty-message">尚無菜單<br><span>點擊上方按鈕建立</span></p>';
+        return;
+    }
+    
+    list.innerHTML = menus.map(m => `
+        <div class="menu-card">
+            <div class="menu-card-title">${m.name}</div>
+            <div class="menu-card-info">${m.items ? m.items.length : 0} 個品項</div>
+            <div class="menu-card-actions">
+                <button class="btn btn-small btn-secondary" onclick="openMenuEditor('${m.id}')">編輯</button>
+                <button class="btn btn-small btn-danger" onclick="requestDelete('${m.id}', 'menu')">刪除</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openMenuEditor(menuId) {
+    currentEditMenuId = menuId;
+    
+    if (menuId) {
+        const menu = menus.find(m => m.id === menuId);
+        document.getElementById('menu-edit-title').textContent = '編輯菜單';
+        document.getElementById('menu-name-input').value = menu.name;
+        editMenuItems = [...(menu.items || [])];
+    } else {
+        document.getElementById('menu-edit-title').textContent = '建立菜單';
+        document.getElementById('menu-name-input').value = '';
+        editMenuItems = [];
+    }
+    
+    renderEditMenuItems();
+    showScreen('menuEdit');
+}
+
+function renderEditMenuItems() {
+    const list = document.getElementById('menu-items-list');
+    if (editMenuItems.length === 0) {
+        list.innerHTML = '<p style="color:#9a9285;text-align:center;padding:20px;">尚無品項</p>';
+        return;
+    }
+    
+    list.innerHTML = editMenuItems.map((item, i) => `
+        <div class="menu-item-row">
+            <span class="menu-item-name">${item.name}</span>
+            <span class="menu-item-price">${item.price ? '$' + item.price : '-'}</span>
+            <button class="btn-remove-order" onclick="removeEditMenuItem(${i})">×</button>
+        </div>
+    `).join('');
+}
+
+function addMenuItem() {
+    const nameInput = document.getElementById('new-item-name');
+    const priceInput = document.getElementById('new-item-price');
+    const name = nameInput.value.trim();
+    const price = priceInput.value ? parseInt(priceInput.value) : null;
+    
+    if (!name) return;
+    
+    editMenuItems.push({ name, price });
+    renderEditMenuItems();
+    nameInput.value = '';
+    priceInput.value = '';
+    nameInput.focus();
+}
+
+function removeEditMenuItem(index) {
+    editMenuItems.splice(index, 1);
+    renderEditMenuItems();
+}
+
+function saveMenu() {
+    const name = document.getElementById('menu-name-input').value.trim();
+    if (!name) return alert('請輸入菜單名稱');
+    
+    if (currentEditMenuId) {
+        const index = menus.findIndex(m => m.id === currentEditMenuId);
+        if (index !== -1) {
+            menus[index].name = name;
+            menus[index].items = editMenuItems;
+        }
+    } else {
+        menus.push({
+            id: 'menu_' + Date.now(),
+            name,
+            items: editMenuItems
+        });
+    }
+    
+    saveMenus();
+    showScreen('menu');
+    renderMenuList();
+}
+
+// ===== 管理員 =====
+function adminLogin(e) {
+    e.preventDefault();
+    const pw = document.getElementById('admin-password').value;
+    if (pw === ADMIN_PASSWORD) {
+        hideModal('admin');
+        document.getElementById('admin-password').value = '';
+        showScreen('admin');
+        loadAdminGatherings();
+    } else { alert('密碼錯誤'); }
+}
+
+function superAdminLogin(e) {
+    e.preventDefault();
+    const pw = document.getElementById('super-admin-password').value;
+    if (pw === SUPER_ADMIN_PASSWORD) {
+        isSuperAdmin = true;
+        hideModal('superAdmin');
+        document.getElementById('super-admin-password').value = '';
+        showScreen('superAdmin');
+        loadSuperAdminGatherings();
+    } else { alert('密碼錯誤'); }
+}
+
+async function loadAdminGatherings() {
+    const list = document.getElementById('admin-gathering-list');
+    try {
+        const snap = await db.collection('gatherings').orderBy('createdAt', 'desc').get();
+        if (snap.empty) { list.innerHTML = '<p class="empty-message">沒有聚餐紀錄</p>'; return; }
+        list.innerHTML = '';
+        snap.forEach(doc => list.appendChild(createGatheringCard(doc.id, doc.data(), true)));
+    } catch (e) { console.error(e); }
+}
+
+async function loadSuperAdminGatherings() {
+    const list = document.getElementById('super-admin-gathering-list');
+    try {
+        const snap = await db.collection('gatherings').orderBy('createdAt', 'desc').get();
+        if (snap.empty) { list.innerHTML = '<p class="empty-message">沒有聚餐紀錄</p>'; return; }
+        list.innerHTML = '';
+        snap.forEach(doc => {
+            const card = createGatheringCard(doc.id, doc.data(), true);
+            list.appendChild(card);
+        });
+    } catch (e) { console.error(e); }
+}
+
+async function toggleGatheringStatus(id, status) {
+    await db.collection('gatherings').doc(id).update({ status: status === 'active' ? 'archived' : 'active' });
+    loadAdminGatherings();
+    loadSuperAdminGatherings();
+    loadGatherings();
+}
+
+// ===== 全域函式 =====
+window.toggleGroup = toggleGroup;
+window.updateAttendance = updateAttendance;
+window.updateSingleOrder = updateSingleOrder;
+window.addOrder = addOrder;
+window.removeOrder = removeOrder;
+window.removeWheelOption = removeWheelOption;
+window.toggleGatheringStatus = toggleGatheringStatus;
+window.requestDelete = requestDelete;
+window.openMenuEditor = openMenuEditor;
+window.removeEditMenuItem = removeEditMenuItem;
+window.showMenuSuggestions = showMenuSuggestions;
+window.selectSuggestion = selectSuggestion;
