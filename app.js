@@ -168,6 +168,11 @@ function setupEventListeners() {
             suggestions.classList.remove('show');
         }
     });
+    
+    // 滾動時隱藏選單
+    document.addEventListener('scroll', () => {
+        document.getElementById('menu-suggestions').classList.remove('show');
+    }, true);
 }
 
 // ===== 聚餐列表 =====
@@ -414,10 +419,27 @@ function showMenuSuggestions(input) {
     }
     
     activeSuggestionInput = input;
+    
+    // 計算位置 - 確保在輸入框正下方
     const rect = input.getBoundingClientRect();
-    suggestions.style.top = (rect.bottom + 4) + 'px';
+    const viewportHeight = window.innerHeight;
+    
+    // 判斷下方空間是否足夠，不夠則顯示在上方
+    const spaceBelow = viewportHeight - rect.bottom;
+    const menuHeight = Math.min(matches.length * 48, 200); // 估算選單高度
+    
+    if (spaceBelow < menuHeight && rect.top > menuHeight) {
+        // 顯示在上方
+        suggestions.style.bottom = (viewportHeight - rect.top + 4) + 'px';
+        suggestions.style.top = 'auto';
+    } else {
+        // 顯示在下方
+        suggestions.style.top = (rect.bottom + 4) + 'px';
+        suggestions.style.bottom = 'auto';
+    }
+    
     suggestions.style.left = rect.left + 'px';
-    suggestions.style.width = rect.width + 'px';
+    suggestions.style.width = Math.max(rect.width, 250) + 'px';
     
     suggestions.innerHTML = matches.slice(0, 8).map(item => `
         <div class="menu-suggestion-item" onclick="selectSuggestion('${item.name.replace(/'/g, "\\'")}', ${item.price || 0})">
@@ -433,18 +455,30 @@ function selectSuggestion(name, price) {
     if (!activeSuggestionInput) return;
     
     const memberId = activeSuggestionInput.dataset.memberId;
-    const index = parseInt(activeSuggestionInput.dataset.index);
+    const index = activeSuggestionInput.dataset.index;
     
+    // 設定餐點名稱
     activeSuggestionInput.value = name;
     
-    const priceInput = document.querySelector(`.order-price[data-member-id="${memberId}"][data-index="${index}"]`);
+    // 找到對應的價格輸入框並設定價格
+    // 使用更精確的選擇器：找同一個 order-item 內的價格輸入框
+    const orderItem = activeSuggestionInput.closest('.order-item');
+    const priceInput = orderItem ? orderItem.querySelector('input[type="number"]') : null;
+    
+    console.log('選擇建議:', name, price);
+    console.log('價格輸入框:', priceInput);
+    
     if (priceInput && price) {
         priceInput.value = price;
     }
     
-    updateSingleOrder(memberId, index, 'name', name);
-    if (price) updateSingleOrder(memberId, index, 'price', price);
+    // 更新資料庫
+    updateSingleOrder(memberId, parseInt(index), 'name', name);
+    if (price) {
+        updateSingleOrder(memberId, parseInt(index), 'price', price);
+    }
     
+    // 隱藏選單
     document.getElementById('menu-suggestions').classList.remove('show');
     activeSuggestionInput = null;
 }
