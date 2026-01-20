@@ -10,9 +10,6 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// ===== Gemini API =====
-const GEMINI_API_KEY = 'AIzaSyDOAsJRpYFsaCi76J-uLKJe4Luh0gx8iBg';
-
 // ===== 家庭成員 - 使用英文 ID =====
 const familyGroups = [
     { id: 'grandparents', name: '阿公阿嬤', members: [
@@ -54,8 +51,8 @@ familyGroups.forEach(g => {
     });
 });
 
-const ADMIN_PASSWORD = '000000';
-const SUPER_ADMIN_PASSWORD = '66666666';
+const ADMIN_PASSWORD = 'family2025';
+const SUPER_ADMIN_PASSWORD = 'superadmin2025';
 
 // ===== 全域變數 =====
 let currentGatheringId = null;
@@ -82,8 +79,7 @@ const screens = {
     admin: document.getElementById('admin-screen'),
     superAdmin: document.getElementById('super-admin-screen'),
     menu: document.getElementById('menu-screen'),
-    menuEdit: document.getElementById('menu-edit-screen'),
-    aiReview: document.getElementById('ai-review-screen')
+    menuEdit: document.getElementById('menu-edit-screen')
 };
 const modals = {
     create: document.getElementById('create-modal'),
@@ -93,14 +89,9 @@ const modals = {
     summary: document.getElementById('summary-modal')
 };
 
-// AI 整理相關變數
-let aiMergeResults = [];
-let aiSingleResults = [];
-let originalOrdersForAI = [];
-
 function showScreen(name) {
-    Object.values(screens).forEach(s => s.classList.remove('active'));
-    screens[name].classList.add('active');
+    Object.values(screens).forEach(s => s && s.classList.remove('active'));
+    screens[name] && screens[name].classList.add('active');
 }
 function showModal(name) { modals[name].classList.add('active'); }
 function hideModal(name) { modals[name].classList.remove('active'); }
@@ -143,21 +134,9 @@ function setupEventListeners() {
         loadGatherings();
     });
     document.getElementById('close-order-btn').addEventListener('click', toggleOrderStatus);
-    document.getElementById('summarize-btn').addEventListener('click', () => summarizeOrders(false));
+    document.getElementById('summarize-btn').addEventListener('click', summarizeOrders);
     document.getElementById('close-summary').addEventListener('click', () => hideModal('summary'));
     document.getElementById('copy-summary').addEventListener('click', copySummary);
-    document.getElementById('ai-summarize-btn').addEventListener('click', openAIReviewScreen);
-    
-    // AI 整理頁面
-    document.getElementById('ai-review-back').addEventListener('click', () => {
-        showScreen('gathering');
-        showModal('summary');
-    });
-    document.getElementById('ai-review-cancel').addEventListener('click', () => {
-        showScreen('gathering');
-        showModal('summary');
-    });
-    document.getElementById('ai-review-apply').addEventListener('click', applyAIMerge);
     
     document.getElementById('add-wheel-option').addEventListener('click', addWheelOption);
     document.getElementById('wheel-new-option').addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); addWheelOption(); } });
@@ -253,16 +232,16 @@ async function confirmDelete() {
         if (deleteType === 'gathering') {
             await db.collection('gatherings').doc(deleteTargetId).delete();
         } else if (deleteType === 'menu') {
-            menus = menus.filter(m => m.id !== deleteTargetId);
-            localStorage.setItem('familyMenus', JSON.stringify(menus));
+            await db.collection('menus').doc(deleteTargetId).delete();
+            await loadMenus();
             renderMenuList();
         }
         hideModal('delete');
         deleteTargetId = null;
         loadGatherings();
-        if (screens.admin.classList.contains('active')) loadAdminGatherings();
-        if (screens.superAdmin.classList.contains('active')) loadSuperAdminGatherings();
-    } catch (e) { console.error('刪除失敗:', e); }
+        if (screens.admin && screens.admin.classList.contains('active')) loadAdminGatherings();
+        if (screens.superAdmin && screens.superAdmin.classList.contains('active')) loadSuperAdminGatherings();
+    } catch (e) { console.error('刪除失敗:', e); alert('刪除失敗'); }
 }
 
 async function createGathering(e) {
@@ -583,8 +562,8 @@ function countOrdersAndPrice(orders) {
     return { count, total };
 }
 
-// ===== 統計（不使用 AI）=====
-async function summarizeOrders(useAI) {
+// ===== 統計 =====
+async function summarizeOrders() {
     const data = currentGatheringData;
     if (!data) return;
     const orders = data.orders || {};
@@ -617,7 +596,7 @@ async function summarizeOrders(useAI) {
     });
     
     const grouped = simpleSummarize(allItems);
-    renderSummary(grouped, memberDetails, familyTotals, false);
+    renderSummary(grouped, memberDetails, familyTotals);
     showModal('summary');
 }
 
@@ -632,322 +611,7 @@ function simpleSummarize(items) {
     return Object.entries(map).map(([name, data]) => ({ name, count: data.count, totalPrice: data.totalPrice })).sort((a, b) => b.count - a.count);
 }
 
-// ===== AI 整理頁面 =====
-async function openAIReviewScreen() {
-    hideModal('summary');
-    showScreen('aiReview');
-    
-    // 顯示載入中
-    document.getElementById('ai-review-loading').style.display = 'block';
-    document.getElementById('ai-review-content').style.display = 'none';
-    
-    // 收集所有餐點
-    const data = currentGatheringData;
-    const orders = data.orders || {};
-    const attendees = data.attendees || {};
-    
-    originalOrdersForAI = [];
-    familyGroups.forEach(g => {
-        g.members.forEach(member => {
-            if (!attendees[member.id]) return;
-            const arr = orders[member.id] || [];
-            arr.forEach((o, idx) => {
-                if (o && o.name && o.name.trim()) {
-                    originalOrdersForAI.push({
-                        memberId: member.id,
-                        memberName: member.name,
-                        index: idx,
-                        name: o.name.trim(),
-                        price: o.price || 0
-                    });
-                }
-            });
-        });
-    });
-    
-    if (originalOrdersForAI.length === 0) {
-        alert('沒有餐點可以整理');
-        showScreen('gathering');
-        showModal('summary');
-        return;
-    }
-    
-    // 呼叫 AI
-    if (GEMINI_API_KEY && GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY_HERE') {
-        await callAIForMerge();
-    } else {
-        alert('請先設定 Gemini API Key');
-        showScreen('gathering');
-        showModal('summary');
-    }
-}
-
-async function callAIForMerge() {
-    // 準備餐點清單，包含價格資訊
-    const itemsWithPrice = originalOrdersForAI.map(o => `${o.name} ($${o.price})`).join('\n');
-    
-    const prompt = `你是餐廳餐點整理助手。請分析以下餐點清單，找出可能是同一道餐點但名稱不同的項目並合併。
-
-判斷標準：
-1. 關鍵字相似：例如「明太子干貝義大利麵」、「明太子干貝麵」、「明太子干貝意大利麵」應該合併
-2. 同義詞：「義大利麵」=「意大利麵」=「pasta」；「燉飯」=「飯」
-3. 順序不同：「青醬雞肉燉飯」=「雞肉青醬燉飯」
-4. 價格參考：相同或相近的價格可以作為輔助判斷依據
-
-請回傳 JSON 格式：
-{
-  "mergeGroups": [
-    {
-      "unifiedName": "統一後的標準名稱",
-      "price": 最常見的價格,
-      "originalNames": ["原始名稱1", "原始名稱2", ...]
-    }
-  ],
-  "singleItems": [
-    {
-      "name": "不需合併的餐點名稱",
-      "price": 價格
-    }
-  ]
-}
-
-注意：
-- 只回傳 JSON，不要其他文字
-- 每個原始餐點只能出現在一個群組中
-- 如果一個餐點沒有相似項目，放在 singleItems 中
-- unifiedName 應該選擇最完整、最清楚的名稱
-
-餐點清單：
-${itemsWithPrice}`;
-
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-        
-        const result = await response.json();
-        console.log('AI Response:', result);
-        
-        // 檢查 API 錯誤
-        if (result.error) {
-            throw new Error(result.error.message || 'API 錯誤');
-        }
-        
-        // 檢查是否有回應
-        if (!result.candidates || result.candidates.length === 0) {
-            console.log('完整回應:', JSON.stringify(result, null, 2));
-            throw new Error('AI 沒有回應內容');
-        }
-        
-        const text = result.candidates[0]?.content?.parts?.[0]?.text || '';
-        console.log('AI 回應文字:', text);
-        
-        if (!text) {
-            throw new Error('AI 回應為空');
-        }
-        
-        // 嘗試解析 JSON
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        
-        if (jsonMatch) {
-            try {
-                const aiResult = JSON.parse(jsonMatch[0]);
-                processAIResult(aiResult);
-            } catch (parseError) {
-                console.error('JSON 解析失敗:', parseError);
-                console.log('嘗試解析的文字:', jsonMatch[0]);
-                throw new Error('JSON 格式錯誤');
-            }
-        } else {
-            console.log('找不到 JSON，原始回應:', text);
-            throw new Error('AI 回應中找不到 JSON 格式');
-        }
-    } catch (e) {
-        console.error('AI 整理失敗:', e);
-        alert('AI 整理失敗：' + e.message + '\n\n請檢查瀏覽器 Console 獲取更多資訊');
-        showScreen('gathering');
-        showModal('summary');
-    }
-}
-
-function processAIResult(aiResult) {
-    aiMergeResults = [];
-    aiSingleResults = [];
-    
-    // 處理合併群組
-    if (aiResult.mergeGroups && Array.isArray(aiResult.mergeGroups)) {
-        aiResult.mergeGroups.forEach((group, idx) => {
-            if (group.originalNames && group.originalNames.length > 1) {
-                // 計算每個原始名稱的數量
-                const itemCounts = {};
-                group.originalNames.forEach(origName => {
-                    const matches = originalOrdersForAI.filter(o => 
-                        o.name.toLowerCase() === origName.toLowerCase() ||
-                        o.name === origName
-                    );
-                    if (matches.length > 0) {
-                        itemCounts[origName] = matches.length;
-                    }
-                });
-                
-                if (Object.keys(itemCounts).length > 0) {
-                    aiMergeResults.push({
-                        id: 'merge_' + idx,
-                        unifiedName: group.unifiedName,
-                        price: group.price || 0,
-                        items: itemCounts
-                    });
-                }
-            }
-        });
-    }
-    
-    // 處理不需合併的項目
-    if (aiResult.singleItems && Array.isArray(aiResult.singleItems)) {
-        aiResult.singleItems.forEach(item => {
-            const matches = originalOrdersForAI.filter(o => 
-                o.name.toLowerCase() === item.name.toLowerCase() ||
-                o.name === item.name
-            );
-            if (matches.length > 0) {
-                aiSingleResults.push({
-                    name: item.name,
-                    price: item.price || matches[0].price || 0,
-                    count: matches.length
-                });
-            }
-        });
-    }
-    
-    // 找出 AI 沒有處理到的項目
-    const processedNames = new Set();
-    aiMergeResults.forEach(m => {
-        Object.keys(m.items).forEach(name => processedNames.add(name.toLowerCase()));
-    });
-    aiSingleResults.forEach(s => processedNames.add(s.name.toLowerCase()));
-    
-    originalOrdersForAI.forEach(o => {
-        if (!processedNames.has(o.name.toLowerCase())) {
-            const existing = aiSingleResults.find(s => s.name.toLowerCase() === o.name.toLowerCase());
-            if (!existing) {
-                const count = originalOrdersForAI.filter(x => x.name.toLowerCase() === o.name.toLowerCase()).length;
-                aiSingleResults.push({
-                    name: o.name,
-                    price: o.price,
-                    count: count
-                });
-                processedNames.add(o.name.toLowerCase());
-            }
-        }
-    });
-    
-    renderAIReviewContent();
-}
-
-function renderAIReviewContent() {
-    document.getElementById('ai-review-loading').style.display = 'none';
-    document.getElementById('ai-review-content').style.display = 'block';
-    
-    // 渲染合併群組
-    const mergeList = document.getElementById('ai-merge-list');
-    if (aiMergeResults.length === 0) {
-        mergeList.innerHTML = '<p style="color:#9a9285;text-align:center;padding:20px;">AI 未發現需要合併的餐點</p>';
-    } else {
-        mergeList.innerHTML = aiMergeResults.map((group, idx) => {
-            const totalCount = Object.values(group.items).reduce((a, b) => a + b, 0);
-            return `
-                <div class="ai-merge-card" data-merge-id="${group.id}">
-                    <div class="ai-merge-header">
-                        <label>統一名稱：</label>
-                        <input type="text" class="ai-merge-input" value="${group.unifiedName}" data-merge-idx="${idx}">
-                        <span class="ai-merge-price">x${totalCount}</span>
-                    </div>
-                    <div class="ai-merge-items">
-                        ${Object.entries(group.items).map(([name, count]) => 
-                            `<span class="ai-merge-item">${name}<span class="ai-merge-item-count">x${count}</span></span>`
-                        ).join('')}
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-    
-    // 渲染不需合併的項目
-    const singleList = document.getElementById('ai-single-list');
-    if (aiSingleResults.length === 0) {
-        singleList.innerHTML = '<p style="color:#9a9285;text-align:center;padding:20px;">無</p>';
-    } else {
-        singleList.innerHTML = aiSingleResults.map(item => `
-            <div class="ai-single-item">
-                <span class="ai-single-name">${item.name}</span>
-                <div class="ai-single-info">
-                    <span class="ai-single-count">x${item.count}</span>
-                    ${item.price ? `<span class="ai-single-price">$${item.price}</span>` : ''}
-                </div>
-            </div>
-        `).join('');
-    }
-}
-
-async function applyAIMerge() {
-    if (aiMergeResults.length === 0) {
-        alert('沒有需要合併的項目');
-        showScreen('gathering');
-        showModal('summary');
-        return;
-    }
-    
-    // 收集使用者修改後的統一名稱
-    const inputs = document.querySelectorAll('.ai-merge-input');
-    inputs.forEach((input, idx) => {
-        aiMergeResults[idx].unifiedName = input.value.trim();
-    });
-    
-    // 建立名稱對應表
-    const nameMapping = {};
-    aiMergeResults.forEach(group => {
-        Object.keys(group.items).forEach(originalName => {
-            nameMapping[originalName.toLowerCase()] = group.unifiedName;
-        });
-    });
-    
-    // 更新資料庫中的餐點名稱
-    try {
-        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
-        const data = doc.data();
-        const orders = data.orders || {};
-        
-        let changeCount = 0;
-        
-        Object.keys(orders).forEach(memberId => {
-            const arr = orders[memberId];
-            if (Array.isArray(arr)) {
-                arr.forEach(order => {
-                    if (order && order.name) {
-                        const lowerName = order.name.trim().toLowerCase();
-                        if (nameMapping[lowerName]) {
-                            order.name = nameMapping[lowerName];
-                            changeCount++;
-                        }
-                    }
-                });
-            }
-        });
-        
-        await db.collection('gatherings').doc(currentGatheringId).update({ orders: orders });
-        
-        alert(`已統一 ${changeCount} 筆餐點名稱！`);
-        showScreen('gathering');
-        
-    } catch (e) {
-        console.error('更新失敗:', e);
-        alert('更新失敗：' + e.message);
-    }
-}
-
-function renderSummary(grouped, memberDetails, familyTotals, usedAI) {
+function renderSummary(grouped, memberDetails, familyTotals) {
     const container = document.getElementById('summary-content');
     const grandTotal = Object.values(familyTotals).reduce((a, b) => a + b, 0);
     
@@ -956,7 +620,7 @@ function renderSummary(grouped, memberDetails, familyTotals, usedAI) {
         return;
     }
     
-    let html = `<div class="summary-section"><h3>餐點統計${usedAI ? '（AI 整理）' : ''}</h3>`;
+    let html = `<div class="summary-section"><h3>餐點統計</h3>`;
     grouped.forEach(i => {
         html += `<div class="summary-item">
             <span class="summary-item-name">${i.name}</span>
@@ -1184,14 +848,18 @@ function clearForcedResult() {
     document.getElementById('forced-result-status').textContent = '已清除';
 }
 
-// ===== 菜單管理 =====
-function loadMenus() {
-    const saved = localStorage.getItem('familyMenus');
-    menus = saved ? JSON.parse(saved) : [];
-}
-
-function saveMenus() {
-    localStorage.setItem('familyMenus', JSON.stringify(menus));
+// ===== 菜單管理（使用 Firestore）=====
+async function loadMenus() {
+    try {
+        const snapshot = await db.collection('menus').orderBy('createdAt', 'desc').get();
+        menus = [];
+        snapshot.forEach(doc => {
+            menus.push({ id: doc.id, ...doc.data() });
+        });
+    } catch (e) {
+        console.error('載入菜單失敗:', e);
+        menus = [];
+    }
 }
 
 function updateMenuSelect() {
@@ -1225,8 +893,8 @@ function openMenuEditor(menuId) {
     if (menuId) {
         const menu = menus.find(m => m.id === menuId);
         document.getElementById('menu-edit-title').textContent = '編輯菜單';
-        document.getElementById('menu-name-input').value = menu.name;
-        editMenuItems = [...(menu.items || [])];
+        document.getElementById('menu-name-input').value = menu ? menu.name : '';
+        editMenuItems = menu && menu.items ? [...menu.items] : [];
     } else {
         document.getElementById('menu-edit-title').textContent = '建立菜單';
         document.getElementById('menu-name-input').value = '';
@@ -1273,27 +941,33 @@ function removeEditMenuItem(index) {
     renderEditMenuItems();
 }
 
-function saveMenu() {
+async function saveMenu() {
     const name = document.getElementById('menu-name-input').value.trim();
     if (!name) return alert('請輸入菜單名稱');
     
-    if (currentEditMenuId) {
-        const index = menus.findIndex(m => m.id === currentEditMenuId);
-        if (index !== -1) {
-            menus[index].name = name;
-            menus[index].items = editMenuItems;
+    try {
+        if (currentEditMenuId) {
+            // 更新現有菜單
+            await db.collection('menus').doc(currentEditMenuId).update({
+                name: name,
+                items: editMenuItems
+            });
+        } else {
+            // 建立新菜單
+            await db.collection('menus').add({
+                name: name,
+                items: editMenuItems,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
         }
-    } else {
-        menus.push({
-            id: 'menu_' + Date.now(),
-            name,
-            items: editMenuItems
-        });
+        
+        await loadMenus();
+        showScreen('menu');
+        renderMenuList();
+    } catch (e) {
+        console.error('儲存菜單失敗:', e);
+        alert('儲存失敗：' + e.message);
     }
-    
-    saveMenus();
-    showScreen('menu');
-    renderMenuList();
 }
 
 // ===== 管理員 =====
