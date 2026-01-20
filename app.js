@@ -1,304 +1,737 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>惠舜&貞惠's Family 聚餐點餐</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
-    <div class="app-container">
-        <!-- 首頁 -->
-        <div id="home-screen" class="screen active">
-            <header class="home-header">
-                <div class="ink-decoration"></div>
-                <h1 class="app-title">惠舜 & 貞惠's Family</h1>
-                <p class="app-subtitle">家族聚餐點餐系統</p>
-            </header>
-            
-            <button class="btn btn-primary btn-large" id="create-gathering-btn">建立新聚餐</button>
-            
-            <div class="section">
-                <h2 class="section-title">進行中的聚餐</h2>
-                <div id="gathering-list" class="gathering-list">
-                    <p class="empty-message">目前沒有進行中的聚餐<br><span>點擊上方按鈕建立一個吧</span></p>
-                </div>
-            </div>
+/* ===== 基礎設定 ===== */
+:root {
+    --bg-primary: #f7f4ef;
+    --bg-secondary: #ede8df;
+    --bg-card: #fdfcfa;
+    --text-primary: #3d3a35;
+    --text-secondary: #6b655a;
+    --text-light: #9a9285;
+    --border-color: #d5cfc3;
+    --border-dark: #b8ad9a;
+    --accent-ink: #4a5568;
+    --accent-wood: #8b7355;
+    --accent-bamboo: #6b8e5f;
+    --accent-rust: #a0522d;
+    --accent-stone: #708090;
+    --shadow-soft: 0 2px 8px rgba(61, 58, 53, 0.08);
+    --shadow-medium: 0 4px 16px rgba(61, 58, 53, 0.12);
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+}
 
-            <div class="section">
-                <h2 class="section-title">吃什麼好呢？</h2>
-                <div class="wheel-section">
-                    <div class="wheel-options-area">
-                        <div id="wheel-options-list" class="wheel-options-list"></div>
-                        <div class="wheel-input-row">
-                            <input type="text" id="wheel-new-option" class="wheel-input" placeholder="輸入想吃的餐廳或料理...">
-                            <button class="btn btn-secondary" id="add-wheel-option">新增</button>
-                        </div>
-                    </div>
-                    <div class="wheel-container">
-                        <div class="wheel-pointer"></div>
-                        <canvas id="wheel-canvas" width="280" height="280"></canvas>
-                    </div>
-                    <button class="btn btn-primary btn-large" id="spin-wheel-btn">轉動輪盤</button>
-                    <div id="wheel-result" class="wheel-result"></div>
-                </div>
-            </div>
-            
-            <div class="footer-buttons">
-                <button class="btn btn-ghost" id="menu-manage-btn">菜單管理</button>
-                <button class="btn btn-ghost admin-btn" id="admin-btn">管理員</button>
-            </div>
-        </div>
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
-        <!-- 建立聚餐 Modal -->
-        <div id="create-modal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header"><h2>建立新聚餐</h2></div>
-                <form id="create-form">
-                    <div class="form-group">
-                        <label>聚餐名稱</label>
-                        <input type="text" id="gathering-name" placeholder="例如：2025 春節聚餐" required>
-                    </div>
-                    <div class="form-group">
-                        <label>日期</label>
-                        <input type="date" id="gathering-date" required>
-                    </div>
-                    <div class="form-group">
-                        <label>餐廳（選填）</label>
-                        <input type="text" id="gathering-restaurant" placeholder="例如：王品牛排">
-                    </div>
-                    <div class="form-group">
-                        <label>使用菜單（選填）</label>
-                        <select id="gathering-menu">
-                            <option value="">不使用菜單</option>
-                        </select>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-ghost" id="cancel-create">取消</button>
-                        <button type="submit" class="btn btn-primary">建立</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+body {
+    font-family: 'Noto Serif TC', Georgia, serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.8;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
 
-        <!-- 刪除確認 Modal -->
-        <div id="delete-modal" class="modal">
-            <div class="modal-content modal-small">
-                <div class="modal-header"><h2>確認刪除</h2></div>
-                <p class="modal-message">確定要刪除嗎？此操作無法復原。</p>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-ghost" id="cancel-delete">取消</button>
-                    <button type="button" class="btn btn-danger" id="confirm-delete">刪除</button>
-                </div>
-            </div>
-        </div>
+body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at 20% 0%, rgba(139, 115, 85, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 100%, rgba(107, 142, 95, 0.06) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+}
 
-        <!-- 管理員登入 Modal -->
-        <div id="admin-modal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header"><h2>管理員登入</h2></div>
-                <form id="admin-form">
-                    <div class="form-group">
-                        <label>密碼</label>
-                        <input type="password" id="admin-password" placeholder="輸入管理員密碼">
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-ghost" id="cancel-admin">取消</button>
-                        <button type="submit" class="btn btn-primary">登入</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+.app-container {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 24px;
+    padding-bottom: 140px;
+}
 
-        <!-- 超級管理員登入 Modal -->
-        <div id="super-admin-modal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header"><h2>超級管理員</h2></div>
-                <form id="super-admin-form">
-                    <div class="form-group">
-                        <label>超級管理員密碼</label>
-                        <input type="password" id="super-admin-password" placeholder="輸入超級管理員密碼">
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-ghost" id="cancel-super-admin">取消</button>
-                        <button type="submit" class="btn btn-primary">登入</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+.screen { display: none; }
+.screen.active { display: block; animation: fadeIn 0.4s ease; }
 
-        <!-- 菜單管理頁面 -->
-        <div id="menu-screen" class="screen">
-            <header class="gathering-header">
-                <button class="back-btn" id="menu-back">← 返回首頁</button>
-                <h1>菜單管理</h1>
-            </header>
-            
-            <div class="section">
-                <div class="menu-actions-row">
-                    <button class="btn btn-primary" id="create-menu-btn">建立新菜單</button>
-                </div>
-                <div id="menu-list" class="gathering-list"></div>
-            </div>
-        </div>
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
-        <!-- 菜單編輯頁面 -->
-        <div id="menu-edit-screen" class="screen">
-            <header class="gathering-header">
-                <button class="back-btn" id="menu-edit-back">← 返回菜單列表</button>
-                <h1 id="menu-edit-title">編輯菜單</h1>
-            </header>
-            
-            <div class="form-group">
-                <label>菜單名稱</label>
-                <input type="text" id="menu-name-input" placeholder="例如：義式餐廳菜單">
-            </div>
-            
-            <div class="section">
-                <h2 class="section-title">餐點項目</h2>
-                <div id="menu-items-list" class="menu-items-list"></div>
-                <div class="menu-item-add">
-                    <input type="text" id="new-item-name" placeholder="餐點名稱">
-                    <input type="number" id="new-item-price" placeholder="價格" min="0">
-                    <button class="btn btn-secondary" id="add-menu-item">新增</button>
-                </div>
-            </div>
-            
-            <div class="bottom-actions-static">
-                <button class="btn btn-primary btn-large" id="save-menu-btn">儲存菜單</button>
-            </div>
-        </div>
+/* ===== 標題 ===== */
+.home-header { text-align: center; padding: 40px 0 32px; }
+.ink-decoration {
+    width: 60px; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent-ink), transparent);
+    margin: 0 auto 16px;
+}
+.app-title {
+    font-size: 1.7rem; font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px; letter-spacing: 0.06em;
+    cursor: default; user-select: none;
+}
+.app-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.9rem; font-weight: 300;
+    letter-spacing: 0.12em;
+}
 
-        <!-- 聚餐詳情頁 -->
-        <div id="gathering-screen" class="screen">
-            <header class="gathering-header">
-                <button class="back-btn" id="back-to-home">← 返回首頁</button>
-                <div class="gathering-title-row">
-                    <h1 id="gathering-title">聚餐名稱</h1>
-                    <span id="gathering-status" class="status-badge">點餐中</span>
-                </div>
-                <p id="gathering-info" class="gathering-info"></p>
-                <p id="gathering-menu-info" class="gathering-menu-info"></p>
-            </header>
+/* ===== 按鈕 ===== */
+.btn {
+    padding: 14px 24px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    font-size: 0.95rem; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    letter-spacing: 0.04em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    user-select: none;
+    -webkit-user-select: none;
+}
 
-            <div class="stats-bar">
-                <div class="stat">
-                    <span class="stat-label">參加人數</span>
-                    <span class="stat-number" id="total-attending">0</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">餐點數量</span>
-                    <span class="stat-number" id="total-ordered">0</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">總金額</span>
-                    <span class="stat-number" id="total-price">$0</span>
-                </div>
-            </div>
+.btn:active { transform: scale(0.98); }
 
-            <div id="family-groups" class="family-groups"></div>
+.btn-primary {
+    background: var(--accent-ink);
+    color: #fdfcfa;
+    border-color: var(--accent-ink);
+}
+.btn-primary:hover { background: #3d4a5c; }
 
-            <div class="bottom-actions">
-                <button class="btn btn-secondary" id="close-order-btn">結束點餐</button>
-                <button class="btn btn-primary" id="summarize-btn">統計餐點</button>
-            </div>
-        </div>
+.btn-secondary {
+    background: var(--bg-card);
+    color: var(--accent-wood);
+    border-color: var(--accent-wood);
+}
+.btn-secondary:hover { background: var(--bg-secondary); }
 
-        <!-- 關鍵字搜尋提示 -->
-        <div id="menu-suggestions" class="menu-suggestions"></div>
+.btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+}
+.btn-ghost:hover { background: var(--bg-secondary); }
 
-        <!-- 統計結果 Modal -->
-        <div id="summary-modal" class="modal">
-            <div class="modal-content modal-large">
-                <div class="modal-header"><h2>餐點統計結果</h2></div>
-                <div id="summary-content" class="summary-content"></div>
-                <div class="form-actions-vertical">
-                    <button class="btn btn-secondary" id="ai-summarize-btn">AI 協助整理</button>
-                    <div class="form-actions">
-                        <button class="btn btn-ghost" id="close-summary">關閉</button>
-                        <button class="btn btn-primary" id="copy-summary">複製結果</button>
-                    </div>
-                </div>
-            </div>
-        </div>
+.btn-danger {
+    background: var(--accent-rust);
+    color: #fdfcfa;
+    border-color: var(--accent-rust);
+}
 
-        <!-- AI 整理頁面 -->
-        <div id="ai-review-screen" class="screen">
-            <header class="gathering-header">
-                <button class="back-btn" id="ai-review-back">← 返回統計</button>
-                <h1>AI 餐點整理</h1>
-                <p class="admin-note">檢查 AI 的合併建議，確認後將統一所有人的餐點名稱</p>
-            </header>
+.btn-large { width: 100%; padding: 16px; }
+.btn-small { padding: 10px 16px; font-size: 0.85rem; }
 
-            <div id="ai-review-loading" class="ai-loading">
-                <div class="loading-spinner"></div>
-                <p>AI 正在分析餐點...</p>
-            </div>
+/* ===== 區塊 ===== */
+.section { margin-top: 36px; }
+.section-title {
+    font-size: 0.85rem; font-weight: 500;
+    color: var(--text-light);
+    margin-bottom: 14px;
+    letter-spacing: 0.08em;
+}
+.section-title::before {
+    content: ''; display: inline-block;
+    width: 16px; height: 1px;
+    background: var(--border-dark);
+    margin-right: 10px;
+    vertical-align: middle;
+}
 
-            <div id="ai-review-content" class="ai-review-content" style="display:none;">
-                <div class="section">
-                    <h2 class="section-title">合併建議</h2>
-                    <p class="ai-hint">AI 會將相似的餐點合併為同一項，你可以編輯統一名稱</p>
-                    <div id="ai-merge-list" class="ai-merge-list"></div>
-                </div>
+/* ===== 聚餐列表 ===== */
+.gathering-list { display: flex; flex-direction: column; gap: 12px; }
 
-                <div class="section">
-                    <h2 class="section-title">不需合併的餐點</h2>
-                    <div id="ai-single-list" class="ai-single-list"></div>
-                </div>
-            </div>
+.gathering-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 18px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-soft);
+}
+.gathering-card:active { transform: scale(0.99); }
 
-            <div class="bottom-actions">
-                <button class="btn btn-ghost" id="ai-review-cancel">取消</button>
-                <button class="btn btn-primary" id="ai-review-apply">確認並統一名稱</button>
-            </div>
-        </div>
+.gathering-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 6px;
+}
+.gathering-card-title { font-size: 1.05rem; font-weight: 600; }
+.gathering-card-info { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 10px; }
+.gathering-card-stats { display: flex; gap: 16px; font-size: 0.85rem; color: var(--text-light); }
 
-        <!-- 管理員頁面 -->
-        <div id="admin-screen" class="screen">
-            <header class="gathering-header">
-                <button class="back-btn" id="admin-back-to-home">← 返回首頁</button>
-                <h1>管理員面板</h1>
-            </header>
-            <div class="section">
-                <h2 class="section-title">所有聚餐紀錄</h2>
-                <div id="admin-gathering-list" class="gathering-list"></div>
-            </div>
-        </div>
+.gathering-card-actions {
+    display: flex; gap: 8px;
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
 
-        <!-- 超級管理員頁面 -->
-        <div id="super-admin-screen" class="screen">
-            <header class="gathering-header">
-                <button class="back-btn" id="super-admin-back">← 返回</button>
-                <h1>超級管理員面板</h1>
-                <p class="admin-note">您擁有完整編輯權限</p>
-            </header>
-            
-            <div class="section">
-                <h2 class="section-title">輪盤控制</h2>
-                <div class="super-admin-section">
-                    <div class="form-group">
-                        <label>強制指定結果</label>
-                        <input type="text" id="forced-wheel-result" placeholder="輸入要強制顯示的結果">
-                    </div>
-                    <button class="btn btn-secondary" id="set-forced-result">設定</button>
-                    <button class="btn btn-ghost" id="clear-forced-result">清除</button>
-                    <p id="forced-result-status" class="status-text"></p>
-                </div>
-            </div>
+.empty-message {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 20px;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--border-color);
+    line-height: 2;
+}
+.empty-message span { font-size: 0.85rem; color: var(--text-light); }
 
-            <div class="section">
-                <h2 class="section-title">所有聚餐紀錄</h2>
-                <div id="super-admin-gathering-list" class="gathering-list"></div>
-            </div>
-        </div>
-    </div>
+/* ===== 輪盤 ===== */
+.wheel-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    box-shadow: var(--shadow-soft);
+}
 
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <script src="app.js"></script>
-</body>
-</html>
+.wheel-options-area { margin-bottom: 20px; }
+.wheel-options-list {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-bottom: 10px; min-height: 32px;
+}
+.wheel-option-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+}
+.wheel-option-remove {
+    background: none; border: none;
+    color: var(--text-light);
+    cursor: pointer; padding: 0 2px;
+    font-size: 1.1rem; line-height: 1;
+}
+.wheel-option-remove:hover { color: var(--accent-rust); }
+
+.wheel-input-row { display: flex; gap: 8px; }
+.wheel-input {
+    flex: 1; padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem; font-family: inherit;
+    background: var(--bg-primary);
+}
+.wheel-input:focus { outline: none; border-color: var(--accent-ink); }
+
+.wheel-container {
+    position: relative;
+    display: flex; justify-content: center;
+    margin: 20px 0;
+}
+.wheel-pointer {
+    position: absolute;
+    top: -6px; left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 18px solid var(--accent-ink);
+    z-index: 10;
+}
+
+#wheel-canvas {
+    border-radius: 50%;
+    box-shadow: 0 0 0 5px var(--bg-card), 0 0 0 7px var(--border-dark), var(--shadow-medium);
+}
+
+.wheel-result {
+    text-align: center;
+    font-size: 1.15rem; font-weight: 600;
+    color: var(--accent-ink);
+    margin-top: 16px; padding: 14px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    display: none;
+}
+.wheel-result.show { display: block; animation: resultReveal 0.4s ease; }
+
+@keyframes resultReveal {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* ===== Footer ===== */
+.footer-buttons {
+    margin-top: 40px;
+    display: flex; justify-content: center; gap: 12px;
+}
+.admin-btn { opacity: 0.6; font-size: 0.85rem; }
+.admin-btn:hover { opacity: 1; }
+
+/* ===== Modal ===== */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(61, 58, 53, 0.5);
+    backdrop-filter: blur(3px);
+    z-index: 1000;
+    align-items: center; justify-content: center;
+    padding: 20px;
+}
+.modal.active { display: flex; }
+
+.modal-content {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    width: 100%; max-width: 400px;
+    max-height: 85vh; overflow-y: auto;
+    animation: modalIn 0.25s ease;
+    box-shadow: var(--shadow-medium);
+    border: 1px solid var(--border-color);
+}
+.modal-small { max-width: 340px; }
+.modal-large { max-width: 480px; }
+
+@keyframes modalIn {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header { text-align: center; margin-bottom: 24px; }
+.modal-header h2 { font-size: 1.2rem; font-weight: 600; letter-spacing: 0.04em; }
+.modal-message { text-align: center; color: var(--text-secondary); margin-bottom: 20px; }
+
+/* ===== 表單 ===== */
+.form-group { margin-bottom: 18px; }
+.form-group label {
+    display: block;
+    font-size: 0.85rem; font-weight: 500;
+    margin-bottom: 6px;
+    color: var(--text-secondary);
+}
+.form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 1rem; font-family: inherit;
+    background: var(--bg-primary);
+}
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--accent-ink);
+}
+.form-group input::placeholder { color: var(--text-light); }
+
+.form-actions { display: flex; gap: 10px; margin-top: 24px; }
+.form-actions .btn { flex: 1; }
+
+.form-actions-vertical { display: flex; flex-direction: column; gap: 12px; }
+
+/* ===== 聚餐詳情 ===== */
+.gathering-header {
+    padding: 14px 0 20px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 20px;
+}
+.back-btn {
+    background: none; border: none;
+    color: var(--accent-ink);
+    font-size: 0.9rem;
+    cursor: pointer; padding: 0;
+    margin-bottom: 10px;
+    font-family: inherit;
+}
+.gathering-title-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 6px;
+}
+.gathering-header h1 { font-size: 1.35rem; font-weight: 600; }
+
+.status-badge {
+    padding: 3px 10px;
+    font-size: 0.7rem; font-weight: 500;
+    border-radius: var(--radius-sm);
+}
+.status-badge.ordering {
+    background: rgba(107, 142, 95, 0.15);
+    color: var(--accent-bamboo);
+    border: 1px solid var(--accent-bamboo);
+}
+.status-badge.closed {
+    background: rgba(112, 128, 144, 0.15);
+    color: var(--accent-stone);
+    border: 1px solid var(--accent-stone);
+}
+
+.gathering-info { color: var(--text-secondary); font-size: 0.9rem; }
+.gathering-menu-info { color: var(--accent-wood); font-size: 0.85rem; margin-top: 4px; }
+.admin-note { color: var(--text-light); font-size: 0.85rem; margin-top: 6px; }
+
+/* ===== 統計列 ===== */
+.stats-bar { display: flex; gap: 12px; margin-bottom: 24px; }
+.stat {
+    flex: 1;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px 10px;
+    text-align: center;
+}
+.stat-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-light);
+    margin-bottom: 2px;
+    letter-spacing: 0.06em;
+}
+.stat-number { font-size: 1.5rem; font-weight: 600; color: var(--accent-ink); }
+
+/* ===== 家庭分組 ===== */
+.family-groups { display: flex; flex-direction: column; gap: 14px; }
+.family-group {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+.group-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 18px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+}
+.group-header:active { background: #e5e0d5; }
+.group-title { font-weight: 600; font-size: 1rem; }
+.group-count { font-size: 0.85rem; color: var(--text-light); margin-left: 8px; }
+.group-toggle { font-size: 0.85rem; color: var(--text-light); transition: transform 0.25s; }
+.family-group.expanded .group-toggle { transform: rotate(180deg); }
+.group-content { display: none; padding: 6px 18px 18px; }
+.family-group.expanded .group-content { display: block; }
+
+.group-total {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px dashed var(--border-color);
+    text-align: right;
+    font-size: 0.9rem; color: var(--accent-wood);
+}
+
+/* ===== 成員 ===== */
+.member-item { padding: 14px 0; border-bottom: 1px solid var(--border-color); }
+.member-item:last-child { border-bottom: none; }
+.member-row { display: flex; align-items: center; gap: 10px; }
+.member-checkbox {
+    width: 20px; height: 20px;
+    cursor: pointer;
+    accent-color: var(--accent-bamboo);
+}
+.member-checkbox:disabled { cursor: not-allowed; opacity: 0.5; }
+.member-name { flex: 1; font-weight: 500; font-size: 0.95rem; }
+.member-status {
+    font-size: 0.7rem; padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    background: rgba(107, 142, 95, 0.15);
+    color: var(--accent-bamboo);
+}
+.member-status.not-attending { background: var(--bg-secondary); color: var(--text-light); }
+.member-total { font-size: 0.85rem; color: var(--accent-wood); margin-left: 8px; }
+
+/* ===== 餐點輸入 ===== */
+.orders-container { margin-top: 12px; margin-left: 30px; }
+.order-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: relative; }
+.order-input-wrapper { flex: 1; position: relative; }
+.order-input {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem; font-family: inherit;
+    background: var(--bg-primary);
+}
+.order-input:focus { outline: none; border-color: var(--accent-ink); }
+.order-input:disabled { background: var(--bg-secondary); color: var(--text-light); cursor: not-allowed; }
+
+.order-price {
+    width: 80px; padding: 10px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem; font-family: inherit;
+    background: var(--bg-primary);
+    text-align: right;
+}
+.order-price:focus { outline: none; border-color: var(--accent-ink); }
+.order-price:disabled { background: var(--bg-secondary); color: var(--text-light); }
+
+.btn-remove-order {
+    width: 30px; height: 30px; padding: 0;
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text-light);
+    border: 1px solid var(--border-color);
+    cursor: pointer; font-size: 1rem;
+    display: flex; align-items: center; justify-content: center;
+}
+.btn-remove-order:hover { background: var(--accent-rust); color: #fff; border-color: var(--accent-rust); }
+.btn-remove-order:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-add-order {
+    width: 100%; padding: 10px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: 1px dashed var(--border-color);
+    color: var(--text-secondary);
+    cursor: pointer; font-size: 0.9rem; font-family: inherit;
+}
+.btn-add-order:hover { border-color: var(--accent-ink); color: var(--accent-ink); }
+.btn-add-order:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ===== 菜單提示 ===== */
+.menu-suggestions {
+    position: fixed;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-medium);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 500;
+    display: none;
+}
+.menu-suggestions.show { display: block; }
+.menu-suggestion-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex; justify-content: space-between;
+}
+.menu-suggestion-item:last-child { border-bottom: none; }
+.menu-suggestion-item:hover { background: var(--bg-secondary); }
+.menu-suggestion-price { color: var(--accent-wood); }
+
+/* ===== 底部操作 ===== */
+.bottom-actions {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    padding: 14px 20px;
+    background: rgba(247, 244, 239, 0.95);
+    backdrop-filter: blur(6px);
+    border-top: 1px solid var(--border-color);
+    display: flex; gap: 10px; justify-content: center;
+}
+.bottom-actions .btn { max-width: 240px; flex: 1; }
+
+.bottom-actions-static {
+    margin-top: 24px; padding: 16px 0;
+}
+
+/* ===== 統計結果 ===== */
+.summary-content {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    padding: 18px;
+    margin-bottom: 16px;
+    max-height: 380px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+}
+.summary-section { margin-bottom: 20px; }
+.summary-section:last-child { margin-bottom: 0; }
+.summary-section h3 {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 500;
+}
+.summary-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border-color);
+}
+.summary-item:last-child { border-bottom: none; }
+.summary-item-name { font-weight: 500; }
+.summary-item-count {
+    color: #fff; font-weight: 600;
+    background: var(--accent-ink);
+    padding: 3px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+.summary-item-price { color: var(--accent-wood); font-weight: 500; margin-left: 8px; }
+.summary-total {
+    margin-top: 16px; padding-top: 12px;
+    border-top: 2px solid var(--accent-ink);
+    font-size: 1.05rem; font-weight: 600;
+    text-align: right;
+}
+
+/* ===== 菜單管理 ===== */
+.menu-actions-row { margin-bottom: 16px; }
+
+.menu-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 10px;
+}
+.menu-card-title { font-weight: 600; margin-bottom: 4px; }
+.menu-card-info { font-size: 0.85rem; color: var(--text-secondary); }
+.menu-card-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+.menu-items-list { margin-bottom: 16px; }
+.menu-item-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+.menu-item-row:last-child { border-bottom: none; }
+.menu-item-name { flex: 1; }
+.menu-item-price { color: var(--accent-wood); width: 70px; text-align: right; }
+
+.menu-item-add {
+    display: flex; gap: 8px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+.menu-item-add input {
+    flex: 1; padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+}
+.menu-item-add input[type="number"] { width: 80px; flex: none; }
+
+/* ===== 超級管理員 ===== */
+.super-admin-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 18px;
+}
+.super-admin-section .btn { margin-right: 8px; margin-top: 8px; }
+.status-text { margin-top: 10px; font-size: 0.85rem; color: var(--accent-bamboo); }
+
+/* ===== AI 整理頁面 ===== */
+.ai-loading {
+    text-align: center;
+    padding: 60px 20px;
+}
+.loading-spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-ink);
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.ai-loading p { color: var(--text-secondary); }
+
+.ai-review-content { padding-bottom: 100px; }
+.ai-hint {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+
+.ai-merge-list, .ai-single-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ai-merge-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    box-shadow: var(--shadow-soft);
+}
+
+.ai-merge-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.ai-merge-header label {
+    font-size: 0.8rem;
+    color: var(--text-light);
+    white-space: nowrap;
+}
+.ai-merge-input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--accent-ink);
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+    font-family: inherit;
+    background: var(--bg-primary);
+    font-weight: 500;
+}
+.ai-merge-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(74, 85, 104, 0.2);
+}
+.ai-merge-price {
+    font-size: 0.9rem;
+    color: var(--accent-wood);
+    font-weight: 500;
+}
+
+.ai-merge-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.ai-merge-item {
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+}
+.ai-merge-item-count {
+    color: var(--accent-ink);
+    font-weight: 600;
+    margin-left: 4px;
+}
+
+.ai-single-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+.ai-single-name { font-weight: 500; }
+.ai-single-info {
+    display: flex;
+    gap: 12px;
+    font-size: 0.85rem;
+}
+.ai-single-count { color: var(--accent-ink); }
+.ai-single-price { color: var(--accent-wood); }
+
+/* ===== 響應式 ===== */
+@media (max-width: 480px) {
+    .app-container { padding: 16px; }
+    .app-title { font-size: 1.5rem; }
+    .stats-bar { gap: 8px; }
+    .stat { padding: 12px 8px; }
+    .stat-number { font-size: 1.3rem; }
+    .orders-container { margin-left: 0; margin-top: 10px; }
+    .order-price { width: 70px; }
+    .bottom-actions { flex-direction: column; gap: 8px; }
+    .bottom-actions .btn { max-width: none; }
+}
