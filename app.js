@@ -23,8 +23,8 @@ const familyGroups = [
     { id: 'family4', name: '朝慶家', members: ['陳朝慶', '陳一辰', '陳奕豪'] }
 ];
 
-const ADMIN_PASSWORD = '66666666';
-const SUPER_ADMIN_PASSWORD = '00000000';
+const ADMIN_PASSWORD = '000000';
+const SUPER_ADMIN_PASSWORD = '66666666';
 
 // ===== 全域變數 =====
 let currentGatheringId = null;
