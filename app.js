@@ -519,38 +519,42 @@ async function updateSingleOrder(memberId, index, field, value) {
     }
 }
 
-async function addOrder(gatheringId, memberName) {
-    // 移除不必要的 template literal 字串符號，直接抓 ID
-    const itemInput = document.getElementById('input-' + memberName);
-    const priceInput = document.getElementById('price-' + memberName);
+async function addOrder(gatheringId, memberId, memberName) {
+    // 1. 取得 DOM 元素
+    const itemInput = document.getElementById(`input-${memberId}`);
+    const priceInput = document.getElementById(`price-${memberId}`);
     
-    if (!itemInput) {
-        console.error('找不到輸入框:', 'input-' + memberName);
-        return;
-    }
+    if (!itemInput) return; // 防錯機制
 
     const itemName = itemInput.value.trim();
     const itemPrice = priceInput ? (parseFloat(priceInput.value) || 0) : 0;
 
+    // 2. 基本檢查
     if (!itemName) {
         alert('請輸入餐點名稱');
         return;
     }
 
+    // 3. 完整的資料庫操作與錯誤處理
     try {
         await db.collection('orders').add({
             gatheringId: gatheringId,
+            memberId: memberId,
             memberName: memberName,
             itemName: itemName,
             itemPrice: itemPrice, // 儲存價格
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
 
+        // 成功後清空輸入框
         itemInput.value = '';
         if (priceInput) priceInput.value = '';
+        
+        console.log(`點餐成功: ${memberName} - ${itemName}`);
     } catch (error) {
+        // 錯誤處理：讓使用者知道失敗了
         console.error("增加點餐失敗: ", error);
-        alert("點餐失敗，請檢查網路連線");
+        alert("點餐失敗！請檢查網路連線或稍後再試。");
     }
 }
 
