@@ -342,22 +342,10 @@ function renderFamilyGroups(attendees, orders, isClosed) {
         
         const count = group.members.filter(m => attendees[m.id]).length;
         let groupTotal = 0;
-        group.members.forEach(member => {
-    const li = document.createElement('li');
-    li.className = 'member-item';
-    
-    // 注意這裡：新增了 class="price-input" 的 input
-    li.innerHTML = `
-        <span class="member-name">${member.name}</span>
-        <div class="input-group">
-            <input type="text" id="input-${member.id}" placeholder="想吃什麼？" class="food-input">
-            <input type="number" id="price-${member.id}" placeholder="金額" class="price-input">
-            <button onclick="addOrder('${gatheringId}', '${member.id}', '${member.name}')">點餐</button>
-        </div>
-        <div id="orders-${member.id}" class="member-orders"></div>
-    `;
-    memberList.appendChild(li);
-});
+        group.members.forEach(m => {
+            const memberOrders = orders[m.id] || [];
+            memberOrders.forEach(o => { if (o && o.price) groupTotal += parseInt(o.price) || 0; });
+        });
         
         el.innerHTML = `
             <div class="group-header" onclick="toggleGroup('${group.id}')">
@@ -531,42 +519,23 @@ async function updateSingleOrder(memberId, index, field, value) {
     }
 }
 
-async function addOrder(gatheringId, memberId, memberName) {
-    // 1. 取得 DOM 元素
-    const itemInput = document.getElementById(`input-${memberId}`);
-    const priceInput = document.getElementById(`price-${memberId}`);
+async function addOrder(memberId) {
+    if (!currentGatheringId) return;
     
-    if (!itemInput) return; // 防錯機制
-
-    const itemName = itemInput.value.trim();
-    const itemPrice = priceInput ? (parseFloat(priceInput.value) || 0) : 0;
-
-    // 2. 基本檢查
-    if (!itemName) {
-        alert('請輸入餐點名稱');
-        return;
-    }
-
-    // 3. 完整的資料庫操作與錯誤處理
     try {
-        await db.collection('orders').add({
-            gatheringId: gatheringId,
-            memberId: memberId,
-            memberName: memberName,
-            itemName: itemName,
-            itemPrice: itemPrice, // 儲存價格
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        // 成功後清空輸入框
-        itemInput.value = '';
-        if (priceInput) priceInput.value = '';
+        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
+        const data = doc.data();
+        const orders = data.orders || {};
+        const arr = orders[memberId] || [];
         
-        console.log(`點餐成功: ${memberName} - ${itemName}`);
-    } catch (error) {
-        // 錯誤處理：讓使用者知道失敗了
-        console.error("增加點餐失敗: ", error);
-        alert("點餐失敗！請檢查網路連線或稍後再試。");
+        arr.push({ name: '', price: '' });
+        orders[memberId] = arr;
+        
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            orders: orders
+        });
+    } catch (e) {
+        console.error('新增餐點失敗:', e);
     }
 }
 
