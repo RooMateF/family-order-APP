@@ -519,23 +519,38 @@ async function updateSingleOrder(memberId, index, field, value) {
     }
 }
 
-async function addOrder(memberId) {
-    if (!currentGatheringId) return;
+async function addOrder(gatheringId, memberName) {
+    // 移除不必要的 template literal 字串符號，直接抓 ID
+    const itemInput = document.getElementById('input-' + memberName);
+    const priceInput = document.getElementById('price-' + memberName);
     
+    if (!itemInput) {
+        console.error('找不到輸入框:', 'input-' + memberName);
+        return;
+    }
+
+    const itemName = itemInput.value.trim();
+    const itemPrice = priceInput ? (parseFloat(priceInput.value) || 0) : 0;
+
+    if (!itemName) {
+        alert('請輸入餐點名稱');
+        return;
+    }
+
     try {
-        const doc = await db.collection('gatherings').doc(currentGatheringId).get();
-        const data = doc.data();
-        const orders = data.orders || {};
-        const arr = orders[memberId] || [];
-        
-        arr.push({ name: '', price: '' });
-        orders[memberId] = arr;
-        
-        await db.collection('gatherings').doc(currentGatheringId).update({
-            orders: orders
+        await db.collection('orders').add({
+            gatheringId: gatheringId,
+            memberName: memberName,
+            itemName: itemName,
+            itemPrice: itemPrice, // 儲存價格
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
-    } catch (e) {
-        console.error('新增餐點失敗:', e);
+
+        itemInput.value = '';
+        if (priceInput) priceInput.value = '';
+    } catch (error) {
+        console.error("增加點餐失敗: ", error);
+        alert("點餐失敗，請檢查網路連線");
     }
 }
 
