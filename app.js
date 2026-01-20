@@ -11,7 +11,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 // ===== Gemini API =====
-const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY_HERE';
+const GEMINI_API_KEY = 'AIzaSyDOAsJRpYFsaCi76J-uLKJe4Luh0gx8iBg';
 
 // ===== 家庭成員 - 使用英文 ID =====
 const familyGroups = [
@@ -54,8 +54,8 @@ familyGroups.forEach(g => {
     });
 });
 
-const ADMIN_PASSWORD = 'family2025';
-const SUPER_ADMIN_PASSWORD = 'superadmin2025';
+const ADMIN_PASSWORD = '000000';
+const SUPER_ADMIN_PASSWORD = '66666666';
 
 // ===== 全域變數 =====
 let currentGatheringId = null;
