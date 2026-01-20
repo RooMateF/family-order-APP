@@ -438,36 +438,47 @@ body::before {
 
 /* ===== 餐點輸入 ===== */
 .orders-container { margin-top: 12px; margin-left: 30px; }
-.order-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: relative; }
-.order-input-wrapper { flex: 1; position: relative; }
+.order-item { 
+    display: flex; 
+    align-items: center; 
+    gap: 8px; 
+    margin-bottom: 8px; 
+    position: relative; 
+}
+.order-input-wrapper { flex: 1; position: relative; min-width: 0; }
 .order-input {
-    width: 100%; padding: 10px 12px;
+    width: 100%; padding: 12px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    font-size: 0.9rem; font-family: inherit;
+    font-size: 1rem; font-family: inherit;
     background: var(--bg-primary);
+    box-sizing: border-box;
 }
 .order-input:focus { outline: none; border-color: var(--accent-ink); }
 .order-input:disabled { background: var(--bg-secondary); color: var(--text-light); cursor: not-allowed; }
 
 .order-price {
-    width: 80px; padding: 10px 8px;
+    width: 70px; 
+    flex: 0 0 70px;
+    padding: 12px 8px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    font-size: 0.9rem; font-family: inherit;
+    font-size: 1rem; font-family: inherit;
     background: var(--bg-primary);
     text-align: right;
+    box-sizing: border-box;
 }
 .order-price:focus { outline: none; border-color: var(--accent-ink); }
 .order-price:disabled { background: var(--bg-secondary); color: var(--text-light); }
 
 .btn-remove-order {
-    width: 30px; height: 30px; padding: 0;
+    width: 36px; height: 36px; padding: 0;
+    flex: 0 0 36px;
     border-radius: var(--radius-sm);
     background: var(--bg-secondary);
     color: var(--text-light);
     border: 1px solid var(--border-color);
-    cursor: pointer; font-size: 1rem;
+    cursor: pointer; font-size: 1.1rem;
     display: flex; align-items: center; justify-content: center;
 }
 .btn-remove-order:hover { background: var(--accent-rust); color: #fff; border-color: var(--accent-rust); }
@@ -485,28 +496,46 @@ body::before {
 .btn-add-order:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ===== 菜單提示 ===== */
+.order-input-wrapper {
+    position: relative;
+    flex: 1;
+}
 .menu-suggestions {
     position: fixed;
     background: var(--bg-card);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--accent-ink);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-medium);
     max-height: 200px;
     overflow-y: auto;
-    z-index: 500;
+    z-index: 9999;
     display: none;
 }
 .menu-suggestions.show { display: block; }
 .menu-suggestion-item {
-    padding: 10px 14px;
+    padding: 14px 16px;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 1rem;
     border-bottom: 1px solid var(--border-color);
-    display: flex; justify-content: space-between;
+    display: flex; 
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
 }
 .menu-suggestion-item:last-child { border-bottom: none; }
-.menu-suggestion-item:hover { background: var(--bg-secondary); }
-.menu-suggestion-price { color: var(--accent-wood); }
+.menu-suggestion-item:hover, .menu-suggestion-item:active { 
+    background: var(--accent-ink); 
+    color: #fff;
+}
+.menu-suggestion-item:hover .menu-suggestion-price,
+.menu-suggestion-item:active .menu-suggestion-price { 
+    color: #fff; 
+}
+.menu-suggestion-price { 
+    color: var(--accent-wood); 
+    font-weight: 500;
+    white-space: nowrap;
+}
 
 /* ===== 底部操作 ===== */
 .bottom-actions {
@@ -635,7 +664,39 @@ body::before {
     .stat { padding: 12px 8px; }
     .stat-number { font-size: 1.3rem; }
     .orders-container { margin-left: 0; margin-top: 10px; }
-    .order-price { width: 70px; }
+    .order-item { 
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .order-input-wrapper { 
+        flex: 1 1 100%;
+        order: 1;
+    }
+    .order-price { 
+        width: 80px; 
+        flex: 0 0 80px;
+        order: 2;
+    }
+    .btn-remove-order {
+        order: 3;
+    }
     .bottom-actions { flex-direction: column; gap: 8px; }
     .bottom-actions .btn { max-width: none; }
+    
+    /* 菜單提示在手機上 */
+    .menu-suggestions {
+        left: 16px !important;
+        right: 16px !important;
+        width: auto !important;
+    }
+    
+    /* 成員區塊手機優化 */
+    .member-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .member-info {
+        flex: 1 1 auto;
+        min-width: 120px;
+    }
 }
