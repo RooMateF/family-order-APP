@@ -730,18 +730,43 @@ ${itemsWithPrice}`;
         const result = await response.json();
         console.log('AI Response:', result);
         
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        // 檢查 API 錯誤
+        if (result.error) {
+            throw new Error(result.error.message || 'API 錯誤');
+        }
+        
+        // 檢查是否有回應
+        if (!result.candidates || result.candidates.length === 0) {
+            console.log('完整回應:', JSON.stringify(result, null, 2));
+            throw new Error('AI 沒有回應內容');
+        }
+        
+        const text = result.candidates[0]?.content?.parts?.[0]?.text || '';
+        console.log('AI 回應文字:', text);
+        
+        if (!text) {
+            throw new Error('AI 回應為空');
+        }
+        
+        // 嘗試解析 JSON
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         
         if (jsonMatch) {
-            const aiResult = JSON.parse(jsonMatch[0]);
-            processAIResult(aiResult);
+            try {
+                const aiResult = JSON.parse(jsonMatch[0]);
+                processAIResult(aiResult);
+            } catch (parseError) {
+                console.error('JSON 解析失敗:', parseError);
+                console.log('嘗試解析的文字:', jsonMatch[0]);
+                throw new Error('JSON 格式錯誤');
+            }
         } else {
-            throw new Error('無法解析 AI 回應');
+            console.log('找不到 JSON，原始回應:', text);
+            throw new Error('AI 回應中找不到 JSON 格式');
         }
     } catch (e) {
         console.error('AI 整理失敗:', e);
-        alert('AI 整理失敗：' + e.message);
+        alert('AI 整理失敗：' + e.message + '\n\n請檢查瀏覽器 Console 獲取更多資訊');
         showScreen('gathering');
         showModal('summary');
     }
