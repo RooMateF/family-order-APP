@@ -1,5 +1,5 @@
 /* ===== 基礎設定 ===== */
-:root {
+root {
     --bg-primary: #f7f4ef;
     --bg-secondary: #ede8df;
     --bg-card: #fdfcfa;
