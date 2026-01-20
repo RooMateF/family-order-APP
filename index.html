@@ -2,16 +2,16 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>惠舜&貞惠's Family 聚餐點餐</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600;700&family=Zen+Maru+Gothic:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="app-container">
-        <!-- 首頁：聚餐列表 -->
+        <!-- 首頁 -->
         <div id="home-screen" class="screen active">
             <header class="home-header">
                 <div class="ink-decoration"></div>
@@ -19,9 +19,7 @@
                 <p class="app-subtitle">家族聚餐點餐系統</p>
             </header>
             
-            <button class="btn btn-primary btn-large" id="create-gathering-btn">
-                建立新聚餐
-            </button>
+            <button class="btn btn-primary btn-large" id="create-gathering-btn">建立新聚餐</button>
             
             <div class="section">
                 <h2 class="section-title">進行中的聚餐</h2>
@@ -34,9 +32,7 @@
                 <h2 class="section-title">吃什麼好呢？</h2>
                 <div class="wheel-section">
                     <div class="wheel-options-area">
-                        <div id="wheel-options-list" class="wheel-options-list">
-                            <!-- 動態產生選項 -->
-                        </div>
+                        <div id="wheel-options-list" class="wheel-options-list"></div>
                         <div class="wheel-input-row">
                             <input type="text" id="wheel-new-option" class="wheel-input" placeholder="輸入想吃的餐廳或料理...">
                             <button class="btn btn-secondary" id="add-wheel-option">新增</button>
@@ -44,10 +40,7 @@
                     </div>
                     <div class="wheel-container">
                         <div class="wheel-pointer"></div>
-                        <div class="wheel" id="food-wheel">
-                            <div class="wheel-inner" id="wheel-inner"></div>
-                            <div class="wheel-center"></div>
-                        </div>
+                        <canvas id="wheel-canvas" width="280" height="280"></canvas>
                     </div>
                     <button class="btn btn-primary btn-large" id="spin-wheel-btn">轉動輪盤</button>
                     <div id="wheel-result" class="wheel-result"></div>
@@ -55,6 +48,7 @@
             </div>
             
             <div class="footer-buttons">
+                <button class="btn btn-ghost" id="menu-manage-btn">菜單管理</button>
                 <button class="btn btn-ghost admin-btn" id="admin-btn">管理員</button>
             </div>
         </div>
@@ -62,13 +56,11 @@
         <!-- 建立聚餐 Modal -->
         <div id="create-modal" class="modal">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h2>建立新聚餐</h2>
-                </div>
+                <div class="modal-header"><h2>建立新聚餐</h2></div>
                 <form id="create-form">
                     <div class="form-group">
                         <label>聚餐名稱</label>
-                        <input type="text" id="gathering-name" placeholder="例如：2026 春節聚餐" required>
+                        <input type="text" id="gathering-name" placeholder="例如：2025 春節聚餐" required>
                     </div>
                     <div class="form-group">
                         <label>日期</label>
@@ -76,7 +68,13 @@
                     </div>
                     <div class="form-group">
                         <label>餐廳（選填）</label>
-                        <input type="text" id="gathering-restaurant" placeholder="例如：里約或達美樂">
+                        <input type="text" id="gathering-restaurant" placeholder="例如：王品牛排">
+                    </div>
+                    <div class="form-group">
+                        <label>使用菜單（選填）</label>
+                        <select id="gathering-menu">
+                            <option value="">不使用菜單</option>
+                        </select>
                     </div>
                     <div class="form-actions">
                         <button type="button" class="btn btn-ghost" id="cancel-create">取消</button>
@@ -86,13 +84,11 @@
             </div>
         </div>
 
-        <!-- 刪除聚餐確認 Modal -->
+        <!-- 刪除確認 Modal -->
         <div id="delete-modal" class="modal">
             <div class="modal-content modal-small">
-                <div class="modal-header">
-                    <h2>確認刪除</h2>
-                </div>
-                <p class="modal-message">確定要刪除此聚餐嗎？此操作無法復原。</p>
+                <div class="modal-header"><h2>確認刪除</h2></div>
+                <p class="modal-message">確定要刪除嗎？此操作無法復原。</p>
                 <div class="form-actions">
                     <button type="button" class="btn btn-ghost" id="cancel-delete">取消</button>
                     <button type="button" class="btn btn-danger" id="confirm-delete">刪除</button>
@@ -103,9 +99,7 @@
         <!-- 管理員登入 Modal -->
         <div id="admin-modal" class="modal">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h2>管理員登入</h2>
-                </div>
+                <div class="modal-header"><h2>管理員登入</h2></div>
                 <form id="admin-form">
                     <div class="form-group">
                         <label>密碼</label>
@@ -122,9 +116,7 @@
         <!-- 超級管理員登入 Modal -->
         <div id="super-admin-modal" class="modal">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h2>超級管理員</h2>
-                </div>
+                <div class="modal-header"><h2>超級管理員</h2></div>
                 <form id="super-admin-form">
                     <div class="form-group">
                         <label>超級管理員密碼</label>
@@ -138,6 +130,48 @@
             </div>
         </div>
 
+        <!-- 菜單管理頁面 -->
+        <div id="menu-screen" class="screen">
+            <header class="gathering-header">
+                <button class="back-btn" id="menu-back">← 返回首頁</button>
+                <h1>菜單管理</h1>
+            </header>
+            
+            <div class="section">
+                <div class="menu-actions-row">
+                    <button class="btn btn-primary" id="create-menu-btn">建立新菜單</button>
+                </div>
+                <div id="menu-list" class="gathering-list"></div>
+            </div>
+        </div>
+
+        <!-- 菜單編輯頁面 -->
+        <div id="menu-edit-screen" class="screen">
+            <header class="gathering-header">
+                <button class="back-btn" id="menu-edit-back">← 返回菜單列表</button>
+                <h1 id="menu-edit-title">編輯菜單</h1>
+            </header>
+            
+            <div class="form-group">
+                <label>菜單名稱</label>
+                <input type="text" id="menu-name-input" placeholder="例如：義式餐廳菜單">
+            </div>
+            
+            <div class="section">
+                <h2 class="section-title">餐點項目</h2>
+                <div id="menu-items-list" class="menu-items-list"></div>
+                <div class="menu-item-add">
+                    <input type="text" id="new-item-name" placeholder="餐點名稱">
+                    <input type="number" id="new-item-price" placeholder="價格" min="0">
+                    <button class="btn btn-secondary" id="add-menu-item">新增</button>
+                </div>
+            </div>
+            
+            <div class="bottom-actions-static">
+                <button class="btn btn-primary btn-large" id="save-menu-btn">儲存菜單</button>
+            </div>
+        </div>
+
         <!-- 聚餐詳情頁 -->
         <div id="gathering-screen" class="screen">
             <header class="gathering-header">
@@ -147,6 +181,7 @@
                     <span id="gathering-status" class="status-badge">點餐中</span>
                 </div>
                 <p id="gathering-info" class="gathering-info"></p>
+                <p id="gathering-menu-info" class="gathering-menu-info"></p>
             </header>
 
             <div class="stats-bar">
@@ -158,11 +193,13 @@
                     <span class="stat-label">餐點數量</span>
                     <span class="stat-number" id="total-ordered">0</span>
                 </div>
+                <div class="stat">
+                    <span class="stat-label">總金額</span>
+                    <span class="stat-number" id="total-price">$0</span>
+                </div>
             </div>
 
-            <div id="family-groups" class="family-groups">
-                <!-- 動態產生家庭分組 -->
-            </div>
+            <div id="family-groups" class="family-groups"></div>
 
             <div class="bottom-actions">
                 <button class="btn btn-secondary" id="close-order-btn">結束點餐</button>
@@ -170,18 +207,20 @@
             </div>
         </div>
 
+        <!-- 關鍵字搜尋提示 -->
+        <div id="menu-suggestions" class="menu-suggestions"></div>
+
         <!-- 統計結果 Modal -->
         <div id="summary-modal" class="modal">
             <div class="modal-content modal-large">
-                <div class="modal-header">
-                    <h2>餐點統計結果</h2>
-                </div>
-                <div id="summary-content" class="summary-content">
-                    <!-- 動態產生 -->
-                </div>
-                <div class="form-actions">
-                    <button class="btn btn-ghost" id="close-summary">關閉</button>
-                    <button class="btn btn-primary" id="copy-summary">複製結果</button>
+                <div class="modal-header"><h2>餐點統計結果</h2></div>
+                <div id="summary-content" class="summary-content"></div>
+                <div class="form-actions-vertical">
+                    <button class="btn btn-secondary" id="ai-summarize-btn">AI 協助整理</button>
+                    <div class="form-actions">
+                        <button class="btn btn-ghost" id="close-summary">關閉</button>
+                        <button class="btn btn-primary" id="copy-summary">複製結果</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -192,12 +231,9 @@
                 <button class="back-btn" id="admin-back-to-home">← 返回首頁</button>
                 <h1>管理員面板</h1>
             </header>
-            
             <div class="section">
                 <h2 class="section-title">所有聚餐紀錄</h2>
-                <div id="admin-gathering-list" class="gathering-list">
-                    <!-- 動態產生 -->
-                </div>
+                <div id="admin-gathering-list" class="gathering-list"></div>
             </div>
         </div>
 
@@ -206,7 +242,7 @@
             <header class="gathering-header">
                 <button class="back-btn" id="super-admin-back">← 返回</button>
                 <h1>超級管理員面板</h1>
-                <p class="admin-note">您擁有完整編輯權限，包含已結單的聚餐</p>
+                <p class="admin-note">您擁有完整編輯權限</p>
             </header>
             
             <div class="section">
@@ -216,22 +252,19 @@
                         <label>強制指定結果</label>
                         <input type="text" id="forced-wheel-result" placeholder="輸入要強制顯示的結果">
                     </div>
-                    <button class="btn btn-secondary" id="set-forced-result">設定強制結果</button>
-                    <button class="btn btn-ghost" id="clear-forced-result">清除強制設定</button>
+                    <button class="btn btn-secondary" id="set-forced-result">設定</button>
+                    <button class="btn btn-ghost" id="clear-forced-result">清除</button>
                     <p id="forced-result-status" class="status-text"></p>
                 </div>
             </div>
 
             <div class="section">
-                <h2 class="section-title">所有聚餐紀錄（完整權限）</h2>
-                <div id="super-admin-gathering-list" class="gathering-list">
-                    <!-- 動態產生 -->
-                </div>
+                <h2 class="section-title">所有聚餐紀錄</h2>
+                <div id="super-admin-gathering-list" class="gathering-list"></div>
             </div>
         </div>
     </div>
 
-    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="app.js"></script>
