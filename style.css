@@ -735,17 +735,20 @@ body::before {
     .bottom-actions { flex-direction: column; gap: 8px; }
     .bottom-actions .btn { max-width: none; }
 }
-.price-input {
-    width: 60px;
-    padding: 8px;
-    border: 1px solid var(--accent-ink);
-    border-radius: 4px;
-    margin-right: 5px;
-    background: rgba(255, 255, 255, 0.5);
-}
-
 .input-group {
     display: flex;
+    gap: 8px;
     align-items: center;
-    gap: 5px;
+}
+
+.price-input {
+    width: 70px;
+    padding: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+}
+
+.food-input {
+    flex: 1; /* 讓菜名輸入框佔據剩餘空間 */
 }
