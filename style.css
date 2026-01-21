@@ -506,8 +506,10 @@ body::before {
     border: 1px solid var(--accent-ink);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-medium);
-    max-height: 200px;
+    max-height: 220px;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     z-index: 9999;
     display: none;
 }
@@ -521,13 +523,15 @@ body::before {
     justify-content: space-between;
     align-items: center;
     gap: 12px;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
 }
 .menu-suggestion-item:last-child { border-bottom: none; }
-.menu-suggestion-item:hover, .menu-suggestion-item:active { 
+.menu-suggestion-item:active { 
     background: var(--accent-ink); 
     color: #fff;
 }
-.menu-suggestion-item:hover .menu-suggestion-price,
 .menu-suggestion-item:active .menu-suggestion-price { 
     color: #fff; 
 }
