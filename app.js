@@ -559,15 +559,15 @@ function selectSuggestion(name, price) {
         console.log('已設定名稱:', name);
     }
     
-    // 設定價格
-    if (priceInputEl && price) {
+    // 設定價格（包含 0 元的情況）
+    if (priceInputEl && price !== undefined && price !== null) {
         priceInputEl.value = price;
         console.log('已設定價格:', price);
     }
     
     // 更新資料庫
     updateSingleOrder(memberId, parseInt(index), 'name', name);
-    if (price) {
+    if (price !== undefined && price !== null) {
         updateSingleOrder(memberId, parseInt(index), 'price', price);
     }
     
