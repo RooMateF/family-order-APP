@@ -10,8 +10,13 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// ===== 家庭成員 - 使用英文 ID =====
-const familyGroups = [
+// ===== 家庭成員 - 從 Firestore 載入 =====
+let familyGroups = [];
+let memberById = {};
+let memberNameById = {};
+
+// 預設家庭結構（首次使用時會存入 Firestore）
+const defaultFamilyGroups = [
     { id: 'grandparents', name: '阿公阿嬤', members: [
         { id: 'm01', name: '陳惠舜' },
         { id: 'm02', name: '林貞惠' }
@@ -41,18 +46,74 @@ const familyGroups = [
     ]}
 ];
 
-// 建立快速查詢表
-const memberById = {};
-const memberNameById = {};
-familyGroups.forEach(g => {
-    g.members.forEach(m => {
-        memberById[m.id] = m;
-        memberNameById[m.id] = m.name;
+function buildMemberLookup() {
+    memberById = {};
+    memberNameById = {};
+    familyGroups.forEach(g => {
+        g.members.forEach(m => {
+            memberById[m.id] = m;
+            memberNameById[m.id] = m.name;
+        });
     });
-});
+}
 
-const ADMIN_PASSWORD = '000000';
-const SUPER_ADMIN_PASSWORD = '66666666';
+async function loadFamilyGroups() {
+    try {
+        const doc = await db.collection('shared').doc('familyGroups').get();
+        if (doc.exists) {
+            familyGroups = doc.data().groups || [];
+        } else {
+            // 首次使用，存入預設值
+            familyGroups = defaultFamilyGroups;
+            await db.collection('shared').doc('familyGroups').set({ groups: familyGroups });
+        }
+        buildMemberLookup();
+    } catch (e) {
+        console.error('載入家庭成員失敗:', e);
+        familyGroups = defaultFamilyGroups;
+        buildMemberLookup();
+    }
+}
+
+async function saveFamilyGroups() {
+    try {
+        await db.collection('shared').doc('familyGroups').set({ groups: familyGroups });
+        buildMemberLookup();
+        console.log('家庭成員儲存成功');
+    } catch (e) {
+        console.error('儲存家庭成員失敗:', e);
+        alert('儲存失敗: ' + e.message);
+    }
+}
+
+// 產生新的成員 ID
+function generateMemberId() {
+    let maxNum = 0;
+    familyGroups.forEach(g => {
+        g.members.forEach(m => {
+            const match = m.id.match(/^m(\d+)$/);
+            if (match) {
+                maxNum = Math.max(maxNum, parseInt(match[1]));
+            }
+        });
+    });
+    return 'm' + String(maxNum + 1).padStart(2, '0');
+}
+
+// 產生新的家庭 ID
+function generateFamilyId() {
+    let maxNum = 0;
+    familyGroups.forEach(g => {
+        const match = g.id.match(/^family(\d+)$/);
+        if (match) {
+            maxNum = Math.max(maxNum, parseInt(match[1]));
+        }
+    });
+    return 'family' + (maxNum + 1);
+}
+
+const ADMIN_PASSWORD = 'family2025';
+const SUPER_ADMIN_PASSWORD = 'superadmin2025';
 
 // ===== 全域變數 =====
 let currentGatheringId = null;
@@ -86,7 +147,8 @@ const modals = {
     delete: document.getElementById('delete-modal'),
     admin: document.getElementById('admin-modal'),
     superAdmin: document.getElementById('super-admin-modal'),
-    summary: document.getElementById('summary-modal')
+    summary: document.getElementById('summary-modal'),
+    family: document.getElementById('family-modal')
 };
 
 function showScreen(name) {
@@ -97,10 +159,11 @@ function showModal(name) { modals[name].classList.add('active'); }
 function hideModal(name) { modals[name].classList.remove('active'); }
 
 // ===== 初始化 =====
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadFamilyGroups();  // 先載入家庭成員
     loadGatherings();
     loadMenus();
-    initWheel();  // 初始化轉盤即時監聽
+    initWheel();
     setupEventListeners();
 });
 
@@ -151,7 +214,16 @@ function setupEventListeners() {
     document.getElementById('save-menu-btn').addEventListener('click', saveMenu);
     
     Object.values(modals).forEach(modal => {
-        modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+        if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+    });
+    
+    // 家庭成員管理
+    document.getElementById('add-family-btn').addEventListener('click', () => openFamilyEditor(null));
+    document.getElementById('cancel-family').addEventListener('click', () => hideModal('family'));
+    document.getElementById('save-family').addEventListener('click', saveFamily);
+    document.getElementById('add-member-btn').addEventListener('click', addEditMember);
+    document.getElementById('new-member-name').addEventListener('keypress', (e) => { 
+        if (e.key === 'Enter') { e.preventDefault(); addEditMember(); } 
     });
     
     let clicks = 0, timer = null;
@@ -1154,6 +1226,7 @@ function adminLogin(e) {
         document.getElementById('admin-password').value = '';
         showScreen('admin');
         loadAdminGatherings();
+        renderFamilyManageList();
     } else { alert('密碼錯誤'); }
 }
 
@@ -1199,6 +1272,128 @@ async function toggleGatheringStatus(id, status) {
     loadGatherings();
 }
 
+// ===== 家庭成員管理 =====
+let editingFamilyId = null;
+let editingMembers = [];
+
+function renderFamilyManageList() {
+    const list = document.getElementById('family-manage-list');
+    if (!list) return;
+    
+    if (familyGroups.length === 0) {
+        list.innerHTML = '<p class="empty-message">尚無家庭資料</p>';
+        return;
+    }
+    
+    list.innerHTML = familyGroups.map(group => `
+        <div class="family-manage-card">
+            <div class="family-manage-header">
+                <span class="family-manage-name">${group.name}</span>
+                <div class="family-manage-actions-row">
+                    <button class="btn btn-ghost" onclick="openFamilyEditor('${group.id}')">編輯</button>
+                    <button class="btn btn-ghost" onclick="requestDeleteFamily('${group.id}')">刪除</button>
+                </div>
+            </div>
+            <div class="family-manage-members">
+                ${group.members.map(m => `<span class="family-member-tag">${m.name}</span>`).join('')}
+            </div>
+        </div>
+    `).join('');
+}
+
+function openFamilyEditor(familyId) {
+    editingFamilyId = familyId;
+    
+    if (familyId) {
+        // 編輯現有家庭
+        const family = familyGroups.find(g => g.id === familyId);
+        if (!family) return;
+        document.getElementById('family-modal-title').textContent = '編輯家庭';
+        document.getElementById('family-name-input').value = family.name;
+        editingMembers = family.members.map(m => ({ ...m }));
+    } else {
+        // 新增家庭
+        document.getElementById('family-modal-title').textContent = '新增家庭';
+        document.getElementById('family-name-input').value = '';
+        editingMembers = [];
+    }
+    
+    renderEditingMembers();
+    showModal('family');
+}
+
+function renderEditingMembers() {
+    const list = document.getElementById('family-members-list');
+    if (editingMembers.length === 0) {
+        list.innerHTML = '<p style="color: var(--text-light); font-size: 0.9rem;">尚無成員，請新增</p>';
+        return;
+    }
+    
+    list.innerHTML = editingMembers.map((m, i) => `
+        <div class="family-member-edit-item">
+            <span>${m.name}</span>
+            <button onclick="removeEditingMember(${i})">×</button>
+        </div>
+    `).join('');
+}
+
+function addEditMember() {
+    const input = document.getElementById('new-member-name');
+    const name = input.value.trim();
+    if (!name) return;
+    
+    const newId = generateMemberId();
+    editingMembers.push({ id: newId, name: name });
+    renderEditingMembers();
+    input.value = '';
+}
+
+function removeEditingMember(index) {
+    editingMembers.splice(index, 1);
+    renderEditingMembers();
+}
+
+async function saveFamily() {
+    const name = document.getElementById('family-name-input').value.trim();
+    if (!name) return alert('請輸入家庭名稱');
+    if (editingMembers.length === 0) return alert('請至少新增一位成員');
+    
+    if (editingFamilyId) {
+        // 更新現有家庭
+        const index = familyGroups.findIndex(g => g.id === editingFamilyId);
+        if (index !== -1) {
+            familyGroups[index].name = name;
+            familyGroups[index].members = editingMembers;
+        }
+    } else {
+        // 新增家庭
+        const newId = generateFamilyId();
+        familyGroups.push({
+            id: newId,
+            name: name,
+            members: editingMembers
+        });
+    }
+    
+    await saveFamilyGroups();
+    hideModal('family');
+    renderFamilyManageList();
+}
+
+function requestDeleteFamily(familyId) {
+    const family = familyGroups.find(g => g.id === familyId);
+    if (!family) return;
+    
+    if (!confirm(`確定要刪除「${family.name}」嗎？此操作無法復原。`)) return;
+    
+    const index = familyGroups.findIndex(g => g.id === familyId);
+    if (index !== -1) {
+        familyGroups.splice(index, 1);
+        saveFamilyGroups();
+        renderFamilyManageList();
+    }
+}
+
 // ===== 全域函式 =====
 window.toggleGroup = toggleGroup;
 window.updateAttendance = updateAttendance;
@@ -1213,3 +1408,6 @@ window.removeEditMenuItem = removeEditMenuItem;
 window.showMenuSuggestions = showMenuSuggestions;
 window.selectSuggestion = selectSuggestion;
 window.handleInputBlur = handleInputBlur;
+window.openFamilyEditor = openFamilyEditor;
+window.removeEditingMember = removeEditingMember;
+window.requestDeleteFamily = requestDeleteFamily;
