@@ -802,7 +802,8 @@ function initWheel() {
             
             renderWheelOptions();
             if (!wheelSpinning) {
-                drawWheel();
+                // 保留當前角度重繪
+                drawWheel(wheelAngle);
             }
             
             // 顯示結果
@@ -828,14 +829,22 @@ function initWheel() {
 async function saveWheelOptions() {
     console.log('儲存轉盤選項:', wheelOptions);
     try {
-        await db.collection('shared').doc('wheel').set({
-            options: wheelOptions,
-            result: null  // 清除舊結果
-        }, { merge: true });
+        await db.collection('shared').doc('wheel').update({
+            options: wheelOptions
+        });
         console.log('轉盤選項儲存成功');
     } catch (e) {
-        console.error('儲存轉盤選項失敗:', e);
-        alert('儲存失敗: ' + e.message);
+        // 如果文件不存在，用 set 建立
+        if (e.code === 'not-found') {
+            await db.collection('shared').doc('wheel').set({
+                options: wheelOptions,
+                result: null
+            });
+            console.log('轉盤選項建立成功');
+        } else {
+            console.error('儲存轉盤選項失敗:', e);
+            alert('儲存失敗: ' + e.message);
+        }
     }
 }
 
@@ -867,7 +876,7 @@ async function addWheelOption() {
     
     wheelOptions.push(val);
     renderWheelOptions();
-    drawWheel();
+    drawWheel(wheelAngle);  // 保留當前角度
     input.value = '';
     
     await saveWheelOptions();
@@ -877,7 +886,7 @@ async function removeWheelOption(i) {
     console.log('removeWheelOption 被呼叫, index:', i);
     wheelOptions.splice(i, 1);
     renderWheelOptions();
-    drawWheel();
+    drawWheel(wheelAngle);  // 保留當前角度
     
     await saveWheelOptions();
 }
