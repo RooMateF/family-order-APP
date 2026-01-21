@@ -162,17 +162,8 @@ function setupEventListeners() {
         if (clicks >= 5) { clicks = 0; showModal('superAdmin'); }
     });
     
-    document.addEventListener('click', (e) => {
-        const suggestions = document.getElementById('menu-suggestions');
-        if (!e.target.classList.contains('order-input')) {
-            suggestions.classList.remove('show');
-        }
-    });
-    
-    // 滾動時隱藏選單
-    document.addEventListener('scroll', () => {
-        document.getElementById('menu-suggestions').classList.remove('show');
-    }, true);
+    // 初始化菜單選單事件
+    initMenuSuggestionEvents();
 }
 
 // ===== 聚餐列表 =====
@@ -400,11 +391,14 @@ function toggleGroup(id) {
 }
 
 // ===== 菜單提示 =====
-let suggestionJustSelected = false;  // 標記是否剛剛選擇了選單項目
+let suggestionJustSelected = false;
 
 function showMenuSuggestions(input) {
     const suggestions = document.getElementById('menu-suggestions');
     const value = input.value.trim().toLowerCase();
+    
+    // 每次都更新，確保指向正確的輸入框
+    activeSuggestionInput = input;
     
     if (!currentMenuData || !currentMenuData.items || value.length === 0) {
         suggestions.classList.remove('show');
@@ -420,31 +414,30 @@ function showMenuSuggestions(input) {
         return;
     }
     
-    activeSuggestionInput = input;
+    // 把目標輸入框的資訊存到選單的 data 屬性上
+    suggestions.dataset.targetMemberId = input.dataset.memberId;
+    suggestions.dataset.targetIndex = input.dataset.index;
     
-    // 計算位置 - 確保在輸入框正下方
+    // 計算位置
     const rect = input.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
-    
-    // 判斷下方空間是否足夠，不夠則顯示在上方
     const spaceBelow = viewportHeight - rect.bottom;
-    const menuHeight = Math.min(matches.length * 48, 200); // 估算選單高度
+    const menuHeight = Math.min(matches.length * 52, 220);
     
     if (spaceBelow < menuHeight && rect.top > menuHeight) {
-        // 顯示在上方
         suggestions.style.bottom = (viewportHeight - rect.top + 4) + 'px';
         suggestions.style.top = 'auto';
     } else {
-        // 顯示在下方
         suggestions.style.top = (rect.bottom + 4) + 'px';
         suggestions.style.bottom = 'auto';
     }
     
     suggestions.style.left = rect.left + 'px';
-    suggestions.style.width = Math.max(rect.width, 250) + 'px';
+    suggestions.style.width = Math.max(rect.width, 280) + 'px';
     
-    suggestions.innerHTML = matches.slice(0, 8).map(item => `
-        <div class="menu-suggestion-item" onmousedown="selectSuggestion('${item.name.replace(/'/g, "\\'")}', ${item.price || 0})" ontouchstart="selectSuggestion('${item.name.replace(/'/g, "\\'")}', ${item.price || 0})">
+    // 使用 data 屬性存儲資料
+    suggestions.innerHTML = matches.slice(0, 10).map(item => `
+        <div class="menu-suggestion-item" data-name="${item.name.replace(/"/g, '&quot;')}" data-price="${item.price || 0}">
             <span>${item.name}</span>
             ${item.price ? `<span class="menu-suggestion-price">$${item.price}</span>` : ''}
         </div>
@@ -454,31 +447,40 @@ function showMenuSuggestions(input) {
 }
 
 function selectSuggestion(name, price) {
-    const input = activeSuggestionInput;
-    if (!input) return;
+    const suggestions = document.getElementById('menu-suggestions');
     
-    // 設定標記，防止 blur 事件重複處理
+    // 從選單的 data 屬性獲取目標資訊（更可靠）
+    const memberId = suggestions.dataset.targetMemberId;
+    const index = suggestions.dataset.targetIndex;
+    
+    console.log('selectSuggestion 被呼叫:', name, price);
+    console.log('目標 memberId:', memberId, 'index:', index);
+    
+    if (!memberId || index === undefined) {
+        console.error('找不到目標輸入框資訊');
+        return;
+    }
+    
     suggestionJustSelected = true;
     
-    const memberId = input.dataset.memberId;
-    const index = input.dataset.index;
-    
-    // 先隱藏選單
-    const suggestions = document.getElementById('menu-suggestions');
+    // 隱藏選單
     suggestions.classList.remove('show');
     
-    // 找到對應的價格輸入框
-    const orderItem = input.closest('.order-item');
-    const priceInput = orderItem ? orderItem.querySelector('input[type="number"]') : null;
+    // 用 querySelector 直接找到正確的輸入框（不依賴 activeSuggestionInput）
+    const nameInput = document.querySelector(`input.order-input[data-member-id="${memberId}"][data-index="${index}"]`);
+    const priceInputEl = document.querySelector(`input.order-price[data-member-id="${memberId}"][data-index="${index}"]`);
     
-    console.log('選擇建議:', name, price, 'memberId:', memberId, 'index:', index);
+    console.log('找到的名稱輸入框:', nameInput);
+    console.log('找到的價格輸入框:', priceInputEl);
     
     // 設定餐點名稱
-    input.value = name;
+    if (nameInput) {
+        nameInput.value = name;
+    }
     
     // 設定價格
-    if (priceInput && price) {
-        priceInput.value = price;
+    if (priceInputEl && price) {
+        priceInputEl.value = price;
     }
     
     // 更新資料庫
@@ -489,24 +491,49 @@ function selectSuggestion(name, price) {
     
     activeSuggestionInput = null;
     
-    // 100ms 後重置標記
     setTimeout(() => {
         suggestionJustSelected = false;
-    }, 100);
+    }, 150);
 }
 
 function handleInputBlur(input, memberId, index) {
-    // 如果剛剛選擇了選單項目，不要再處理 blur
-    if (suggestionJustSelected) {
-        return;
-    }
+    // 如果剛選擇了選單項目，不處理 blur
+    if (suggestionJustSelected) return;
     
-    // 延遲一點執行，確保選單點擊事件先處理
     setTimeout(() => {
         if (!suggestionJustSelected) {
             updateSingleOrder(memberId, index, 'name', input.value);
         }
-    }, 50);
+    }, 100);
+}
+
+// 初始化選單事件監聽
+function initMenuSuggestionEvents() {
+    // 點擊選單外部時關閉（但排除選單本身和輸入框）
+    document.addEventListener('pointerdown', (e) => {
+        const menu = document.getElementById('menu-suggestions');
+        if (!menu || !menu.classList.contains('show')) return;
+        
+        const hitMenu = menu.contains(e.target);
+        const hitInput = activeSuggestionInput && (e.target === activeSuggestionInput);
+        
+        if (!hitMenu && !hitInput) {
+            menu.classList.remove('show');
+        }
+    }, { capture: true });
+    
+    // 在選單上點擊時選取項目（使用 pointerdown 避免 blur 先觸發）
+    document.addEventListener('pointerdown', (e) => {
+        const item = e.target.closest('.menu-suggestion-item');
+        if (!item) return;
+        
+        e.preventDefault();  // 阻止 blur 事件
+        e.stopPropagation();
+        
+        const name = item.dataset.name || '';
+        const price = parseInt(item.dataset.price) || 0;
+        selectSuggestion(name, price);
+    }, { capture: true });
 }
 
 // ===== 資料操作 - 使用整個物件更新避免中文路徑問題 =====
