@@ -112,8 +112,8 @@ function generateFamilyId() {
     return 'family' + (maxNum + 1);
 }
 
-const ADMIN_PASSWORD = 'family2025';
-const SUPER_ADMIN_PASSWORD = 'superadmin2025';
+const ADMIN_PASSWORD = '000000';
+const SUPER_ADMIN_PASSWORD = '66666666';
 
 // ===== 全域變數 =====
 let currentGatheringId = null;
