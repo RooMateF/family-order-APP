@@ -148,7 +148,8 @@ const modals = {
     admin: document.getElementById('admin-modal'),
     superAdmin: document.getElementById('super-admin-modal'),
     summary: document.getElementById('summary-modal'),
-    family: document.getElementById('family-modal')
+    family: document.getElementById('family-modal'),
+    menuView: document.getElementById('menu-view-modal')
 };
 
 function showScreen(name) {
@@ -200,6 +201,8 @@ function setupEventListeners() {
     document.getElementById('summarize-btn').addEventListener('click', summarizeOrders);
     document.getElementById('close-summary').addEventListener('click', () => hideModal('summary'));
     document.getElementById('copy-summary').addEventListener('click', copySummary);
+    document.getElementById('view-menu-btn').addEventListener('click', showMenuView);
+    document.getElementById('close-menu-view').addEventListener('click', () => hideModal('menuView'));
     
     document.getElementById('add-wheel-option').addEventListener('click', addWheelOption);
     document.getElementById('wheel-new-option').addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); addWheelOption(); } });
@@ -360,12 +363,13 @@ function renderGatheringDetail(data) {
     document.getElementById('gathering-title').textContent = data.name;
     document.getElementById('gathering-info').textContent = `${data.date}${data.restaurant ? ' · ' + data.restaurant : ''}`;
     
+    const menuRow = document.getElementById('gathering-menu-row');
     const menuInfo = document.getElementById('gathering-menu-info');
     if (currentMenuData) {
         menuInfo.textContent = `使用菜單：${currentMenuData.name}`;
-        menuInfo.style.display = 'block';
+        menuRow.style.display = 'flex';
     } else {
-        menuInfo.style.display = 'none';
+        menuRow.style.display = 'none';
     }
     
     const statusEl = document.getElementById('gathering-status');
@@ -864,6 +868,25 @@ function copySummary() {
         ta.select(); document.execCommand('copy');
         document.body.removeChild(ta); alert('已複製');
     });
+}
+
+function showMenuView() {
+    if (!currentMenuData || !currentMenuData.items) {
+        alert('沒有菜單資料');
+        return;
+    }
+    
+    document.getElementById('menu-view-title').textContent = currentMenuData.name;
+    
+    const content = document.getElementById('menu-view-content');
+    content.innerHTML = currentMenuData.items.map(item => `
+        <div class="menu-view-item">
+            <span class="menu-view-item-name">${item.name}</span>
+            <span class="menu-view-item-price">${item.price ? '$' + item.price : '-'}</span>
+        </div>
+    `).join('');
+    
+    showModal('menuView');
 }
 
 // ===== 輪盤（全域共用，使用獨立的 Firestore document）=====
