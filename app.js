@@ -974,7 +974,12 @@ async function spinWheel() {
     
     const n = wheelOptions.length;
     const arc = (Math.PI * 2) / n;
-    const targetAngle = -winIndex * arc - arc / 2;
+    
+    // 在選項範圍內隨機一個位置（不是正中間）
+    // 隨機偏移量：-0.4 到 +0.4 之間（避免太靠近邊緣）
+    const randomOffset = (Math.random() - 0.5) * 0.8 * arc;
+    const targetAngle = -winIndex * arc - arc / 2 + randomOffset;
+    
     const spins = 5 * Math.PI * 2;
     const totalRotation = spins + targetAngle - (wheelAngle % (Math.PI * 2));
     
