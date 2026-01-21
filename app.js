@@ -314,6 +314,7 @@ function renderGatheringDetail(data) {
     // 更新轉盤選項和結果（如果轉盤沒有在轉動中）
     if (!wheelSpinning) {
         const newOptions = data.wheelOptions || [];
+        console.log('從 Firestore 載入轉盤選項:', newOptions);
         // 始終更新轉盤選項
         wheelOptions = [...newOptions];
         renderWheelOptions();
@@ -828,28 +829,37 @@ function loadWheelOptions() {
 }
 
 async function saveWheelOptions() {
-    if (!currentGatheringId) return;
+    if (!currentGatheringId) {
+        console.error('saveWheelOptions: 沒有 currentGatheringId');
+        return;
+    }
+    console.log('儲存轉盤選項:', wheelOptions, '到聚餐:', currentGatheringId);
     try {
         await db.collection('gatherings').doc(currentGatheringId).update({
             wheelOptions: wheelOptions
         });
+        console.log('轉盤選項儲存成功');
     } catch (e) {
         console.error('儲存轉盤選項失敗:', e);
+        alert('儲存失敗: ' + e.message);
     }
 }
 
 async function saveWheelResult(resultText) {
     if (!currentGatheringId) return;
+    console.log('儲存轉盤結果:', resultText);
     try {
         await db.collection('gatherings').doc(currentGatheringId).update({
             wheelResult: resultText
         });
+        console.log('轉盤結果儲存成功');
     } catch (e) {
         console.error('儲存轉盤結果失敗:', e);
     }
 }
 
 function renderWheelOptions() {
+    console.log('renderWheelOptions, 目前選項:', wheelOptions);
     const list = document.getElementById('wheel-options-list');
     list.innerHTML = wheelOptions.map((opt, i) => `
         <span class="wheel-option-tag">${opt}<button class="wheel-option-remove" onclick="removeWheelOption(${i})">×</button></span>
