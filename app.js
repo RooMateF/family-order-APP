@@ -279,6 +279,12 @@ function openGathering(id) {
 }
 
 function renderGatheringDetail(data) {
+    // 如果正在處理選單選擇，跳過這次渲染
+    if (skipNextRender) {
+        console.log('跳過渲染，等待資料庫更新');
+        return;
+    }
+    
     document.getElementById('gathering-title').textContent = data.name;
     document.getElementById('gathering-info').textContent = `${data.date}${data.restaurant ? ' · ' + data.restaurant : ''}`;
     
@@ -392,6 +398,7 @@ function toggleGroup(id) {
 
 // ===== 菜單提示 =====
 let suggestionJustSelected = false;
+let skipNextRender = false;  // 防止選擇後被 Firestore 更新覆蓋
 
 function showMenuSuggestions(input) {
     const suggestions = document.getElementById('menu-suggestions');
@@ -449,7 +456,7 @@ function showMenuSuggestions(input) {
 function selectSuggestion(name, price) {
     const suggestions = document.getElementById('menu-suggestions');
     
-    // 從選單的 data 屬性獲取目標資訊（更可靠）
+    // 從選單的 data 屬性獲取目標資訊
     const memberId = suggestions.dataset.targetMemberId;
     const index = suggestions.dataset.targetIndex;
     
@@ -462,11 +469,12 @@ function selectSuggestion(name, price) {
     }
     
     suggestionJustSelected = true;
+    skipNextRender = true;  // 防止 Firestore 更新覆蓋輸入框
     
     // 隱藏選單
     suggestions.classList.remove('show');
     
-    // 用 querySelector 直接找到正確的輸入框（不依賴 activeSuggestionInput）
+    // 用 querySelector 直接找到正確的輸入框
     const nameInput = document.querySelector(`input.order-input[data-member-id="${memberId}"][data-index="${index}"]`);
     const priceInputEl = document.querySelector(`input.order-price[data-member-id="${memberId}"][data-index="${index}"]`);
     
@@ -476,11 +484,13 @@ function selectSuggestion(name, price) {
     // 設定餐點名稱
     if (nameInput) {
         nameInput.value = name;
+        console.log('已設定名稱:', name);
     }
     
     // 設定價格
     if (priceInputEl && price) {
         priceInputEl.value = price;
+        console.log('已設定價格:', price);
     }
     
     // 更新資料庫
@@ -491,9 +501,11 @@ function selectSuggestion(name, price) {
     
     activeSuggestionInput = null;
     
+    // 延遲後重置標記，讓 Firestore 更新後可以正常渲染
     setTimeout(() => {
         suggestionJustSelected = false;
-    }, 150);
+        skipNextRender = false;
+    }, 500);
 }
 
 function handleInputBlur(input, memberId, index) {
