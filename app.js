@@ -657,7 +657,14 @@ async function updateSingleOrder(memberId, index, field, value) {
         const arr = orders[memberId] || [{ name: '', price: '' }];
         
         if (!arr[index]) arr[index] = { name: '', price: '' };
-        arr[index][field] = field === 'price' ? (value ? parseInt(value) : '') : value.trim();
+        
+        if (field === 'price') {
+            // 處理價格：允許 0，只有空字串或非數字才設為空
+            const numValue = parseInt(value);
+            arr[index][field] = (value === '' || value === null || value === undefined || isNaN(numValue)) ? '' : numValue;
+        } else {
+            arr[index][field] = value.trim();
+        }
         
         orders[memberId] = arr;
         
