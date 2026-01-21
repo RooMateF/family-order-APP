@@ -112,8 +112,8 @@ function generateFamilyId() {
     return 'family' + (maxNum + 1);
 }
 
-const ADMIN_PASSWORD = '000000';
-const SUPER_ADMIN_PASSWORD = '66666666';
+const ADMIN_PASSWORD = 'family2025';
+const SUPER_ADMIN_PASSWORD = 'superadmin2025';
 
 // ===== 全域變數 =====
 let currentGatheringId = null;
@@ -483,14 +483,15 @@ function showMenuSuggestions(input) {
     // 每次都更新，確保指向正確的輸入框
     activeSuggestionInput = input;
     
-    if (!currentMenuData || !currentMenuData.items || value.length === 0) {
+    if (!currentMenuData || !currentMenuData.items) {
         suggestions.classList.remove('show');
         return;
     }
     
-    const matches = currentMenuData.items.filter(item => 
-        item.name.toLowerCase().includes(value)
-    );
+    // 空值時顯示所有選項，有輸入時過濾
+    const matches = value.length === 0 
+        ? currentMenuData.items 
+        : currentMenuData.items.filter(item => item.name.toLowerCase().includes(value));
     
     if (matches.length === 0) {
         suggestions.classList.remove('show');
