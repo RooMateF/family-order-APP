@@ -51,8 +51,8 @@ familyGroups.forEach(g => {
     });
 });
 
-const ADMIN_PASSWORD = '000000';
-const SUPER_ADMIN_PASSWORD = '66666666';
+const ADMIN_PASSWORD = 'family2025';
+const SUPER_ADMIN_PASSWORD = 'superadmin2025';
 
 // ===== 全域變數 =====
 let currentGatheringId = null;
@@ -313,19 +313,19 @@ function renderGatheringDetail(data) {
     
     // 更新轉盤選項和結果（如果轉盤沒有在轉動中）
     if (!wheelSpinning) {
-        // 檢查選項是否有變化
         const newOptions = data.wheelOptions || [];
-        if (JSON.stringify(newOptions) !== JSON.stringify(wheelOptions)) {
-            wheelOptions = newOptions;
-            renderWheelOptions();
-            drawWheel();
-        }
+        // 始終更新轉盤選項
+        wheelOptions = [...newOptions];
+        renderWheelOptions();
+        drawWheel();
         
         // 更新結果顯示
         const result = document.getElementById('wheel-result');
         if (data.wheelResult) {
             result.textContent = `結果：${data.wheelResult}`;
             result.classList.add('show');
+        } else {
+            result.classList.remove('show');
         }
     }
 }
