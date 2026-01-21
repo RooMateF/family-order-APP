@@ -100,9 +100,8 @@ function hideModal(name) { modals[name].classList.remove('active'); }
 document.addEventListener('DOMContentLoaded', () => {
     loadGatherings();
     loadMenus();
+    initWheel();  // 初始化轉盤即時監聽
     setupEventListeners();
-    // 初始化轉盤畫面（空的）
-    drawWheel();
 });
 
 function setupEventListeners() {
@@ -310,25 +309,6 @@ function renderGatheringDetail(data) {
     document.getElementById('total-price').textContent = '$' + totalPrice;
     
     renderFamilyGroups(data.attendees || {}, data.orders || {}, isClosed);
-    
-    // 更新轉盤選項和結果（如果轉盤沒有在轉動中）
-    if (!wheelSpinning) {
-        const newOptions = data.wheelOptions || [];
-        console.log('從 Firestore 載入轉盤選項:', newOptions);
-        // 始終更新轉盤選項
-        wheelOptions = [...newOptions];
-        renderWheelOptions();
-        drawWheel();
-        
-        // 更新結果顯示
-        const result = document.getElementById('wheel-result');
-        if (data.wheelResult) {
-            result.textContent = `結果：${data.wheelResult}`;
-            result.classList.add('show');
-        } else {
-            result.classList.remove('show');
-        }
-    }
 }
 
 function renderFamilyGroups(attendees, orders, isClosed) {
@@ -807,37 +787,51 @@ function copySummary() {
     });
 }
 
-// ===== 輪盤（同步到 Firestore）=====
-function loadWheelOptions() {
-    // 從當前聚餐資料載入轉盤選項
-    if (currentGatheringData && currentGatheringData.wheelOptions) {
-        wheelOptions = currentGatheringData.wheelOptions;
-    } else {
-        wheelOptions = [];
-    }
-    renderWheelOptions();
-    drawWheel();
-    
-    // 顯示上次的結果
-    const result = document.getElementById('wheel-result');
-    if (currentGatheringData && currentGatheringData.wheelResult) {
-        result.textContent = `結果：${currentGatheringData.wheelResult}`;
-        result.classList.add('show');
-    } else {
-        result.classList.remove('show');
-    }
+// ===== 輪盤（全域共用，使用獨立的 Firestore document）=====
+let wheelUnsubscribe = null;
+
+function initWheel() {
+    // 監聽轉盤資料的即時變化
+    wheelUnsubscribe = db.collection('shared').doc('wheel').onSnapshot(doc => {
+        if (doc.exists) {
+            const data = doc.data();
+            wheelOptions = data.options || [];
+            const lastResult = data.result || null;
+            
+            console.log('轉盤資料更新:', wheelOptions, '結果:', lastResult);
+            
+            renderWheelOptions();
+            if (!wheelSpinning) {
+                drawWheel();
+            }
+            
+            // 顯示結果
+            const resultEl = document.getElementById('wheel-result');
+            if (lastResult) {
+                resultEl.textContent = `結果：${lastResult}`;
+                resultEl.classList.add('show');
+            } else {
+                resultEl.classList.remove('show');
+            }
+        } else {
+            // 如果文件不存在，建立它
+            db.collection('shared').doc('wheel').set({
+                options: [],
+                result: null
+            });
+        }
+    }, err => {
+        console.error('監聽轉盤失敗:', err);
+    });
 }
 
 async function saveWheelOptions() {
-    if (!currentGatheringId) {
-        console.error('saveWheelOptions: 沒有 currentGatheringId');
-        return;
-    }
-    console.log('儲存轉盤選項:', wheelOptions, '到聚餐:', currentGatheringId);
+    console.log('儲存轉盤選項:', wheelOptions);
     try {
-        await db.collection('gatherings').doc(currentGatheringId).update({
-            wheelOptions: wheelOptions
-        });
+        await db.collection('shared').doc('wheel').set({
+            options: wheelOptions,
+            result: null  // 清除舊結果
+        }, { merge: true });
         console.log('轉盤選項儲存成功');
     } catch (e) {
         console.error('儲存轉盤選項失敗:', e);
@@ -846,11 +840,10 @@ async function saveWheelOptions() {
 }
 
 async function saveWheelResult(resultText) {
-    if (!currentGatheringId) return;
     console.log('儲存轉盤結果:', resultText);
     try {
-        await db.collection('gatherings').doc(currentGatheringId).update({
-            wheelResult: resultText
+        await db.collection('shared').doc('wheel').update({
+            result: resultText
         });
         console.log('轉盤結果儲存成功');
     } catch (e) {
@@ -859,8 +852,8 @@ async function saveWheelResult(resultText) {
 }
 
 function renderWheelOptions() {
-    console.log('renderWheelOptions, 目前選項:', wheelOptions);
     const list = document.getElementById('wheel-options-list');
+    if (!list) return;
     list.innerHTML = wheelOptions.map((opt, i) => `
         <span class="wheel-option-tag">${opt}<button class="wheel-option-remove" onclick="removeWheelOption(${i})">×</button></span>
     `).join('');
@@ -869,19 +862,24 @@ function renderWheelOptions() {
 async function addWheelOption() {
     const input = document.getElementById('wheel-new-option');
     const val = input.value.trim();
+    console.log('addWheelOption 被呼叫, 值:', val);
     if (!val) return;
+    
     wheelOptions.push(val);
-    await saveWheelOptions();
     renderWheelOptions();
     drawWheel();
     input.value = '';
+    
+    await saveWheelOptions();
 }
 
 async function removeWheelOption(i) {
+    console.log('removeWheelOption 被呼叫, index:', i);
     wheelOptions.splice(i, 1);
-    await saveWheelOptions();
     renderWheelOptions();
     drawWheel();
+    
+    await saveWheelOptions();
 }
 
 function drawWheel(rotation = 0) {
