@@ -183,7 +183,10 @@
                     <span id="gathering-status" class="status-badge">點餐中</span>
                 </div>
                 <p id="gathering-info" class="gathering-info"></p>
-                <p id="gathering-menu-info" class="gathering-menu-info"></p>
+                <div id="gathering-menu-row" class="gathering-menu-row" style="display: none;">
+                    <p id="gathering-menu-info" class="gathering-menu-info"></p>
+                    <button class="btn btn-ghost btn-small" id="view-menu-btn">查看菜單</button>
+                </div>
             </header>
 
             <div class="stats-bar">
@@ -220,6 +223,17 @@
                 <div class="form-actions">
                     <button class="btn btn-ghost" id="close-summary">關閉</button>
                     <button class="btn btn-primary" id="copy-summary">複製結果</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 菜單瀏覽 Modal -->
+        <div id="menu-view-modal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header"><h2 id="menu-view-title">菜單</h2></div>
+                <div id="menu-view-content" class="menu-view-content"></div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" id="close-menu-view">關閉</button>
                 </div>
             </div>
         </div>
