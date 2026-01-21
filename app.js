@@ -51,8 +51,8 @@ familyGroups.forEach(g => {
     });
 });
 
-const ADMIN_PASSWORD = 'family2025';
-const SUPER_ADMIN_PASSWORD = 'superadmin2025';
+const ADMIN_PASSWORD = '000000';
+const SUPER_ADMIN_PASSWORD = '66666666';
 
 // ===== 全域變數 =====
 let currentGatheringId = null;
@@ -99,9 +99,10 @@ function hideModal(name) { modals[name].classList.remove('active'); }
 // ===== 初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
     loadGatherings();
-    loadWheelOptions();
     loadMenus();
     setupEventListeners();
+    // 初始化轉盤畫面（空的）
+    drawWheel();
 });
 
 function setupEventListeners() {
@@ -309,6 +310,24 @@ function renderGatheringDetail(data) {
     document.getElementById('total-price').textContent = '$' + totalPrice;
     
     renderFamilyGroups(data.attendees || {}, data.orders || {}, isClosed);
+    
+    // 更新轉盤選項和結果（如果轉盤沒有在轉動中）
+    if (!wheelSpinning) {
+        // 檢查選項是否有變化
+        const newOptions = data.wheelOptions || [];
+        if (JSON.stringify(newOptions) !== JSON.stringify(wheelOptions)) {
+            wheelOptions = newOptions;
+            renderWheelOptions();
+            drawWheel();
+        }
+        
+        // 更新結果顯示
+        const result = document.getElementById('wheel-result');
+        if (data.wheelResult) {
+            result.textContent = `結果：${data.wheelResult}`;
+            result.classList.add('show');
+        }
+    }
 }
 
 function renderFamilyGroups(attendees, orders, isClosed) {
@@ -787,16 +806,47 @@ function copySummary() {
     });
 }
 
-// ===== 輪盤 =====
+// ===== 輪盤（同步到 Firestore）=====
 function loadWheelOptions() {
-    const saved = localStorage.getItem('wheelOptions');
-    wheelOptions = saved ? JSON.parse(saved) : [];
+    // 從當前聚餐資料載入轉盤選項
+    if (currentGatheringData && currentGatheringData.wheelOptions) {
+        wheelOptions = currentGatheringData.wheelOptions;
+    } else {
+        wheelOptions = [];
+    }
     renderWheelOptions();
     drawWheel();
+    
+    // 顯示上次的結果
+    const result = document.getElementById('wheel-result');
+    if (currentGatheringData && currentGatheringData.wheelResult) {
+        result.textContent = `結果：${currentGatheringData.wheelResult}`;
+        result.classList.add('show');
+    } else {
+        result.classList.remove('show');
+    }
 }
 
-function saveWheelOptions() {
-    localStorage.setItem('wheelOptions', JSON.stringify(wheelOptions));
+async function saveWheelOptions() {
+    if (!currentGatheringId) return;
+    try {
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            wheelOptions: wheelOptions
+        });
+    } catch (e) {
+        console.error('儲存轉盤選項失敗:', e);
+    }
+}
+
+async function saveWheelResult(resultText) {
+    if (!currentGatheringId) return;
+    try {
+        await db.collection('gatherings').doc(currentGatheringId).update({
+            wheelResult: resultText
+        });
+    } catch (e) {
+        console.error('儲存轉盤結果失敗:', e);
+    }
 }
 
 function renderWheelOptions() {
@@ -806,20 +856,20 @@ function renderWheelOptions() {
     `).join('');
 }
 
-function addWheelOption() {
+async function addWheelOption() {
     const input = document.getElementById('wheel-new-option');
     const val = input.value.trim();
     if (!val) return;
     wheelOptions.push(val);
-    saveWheelOptions();
+    await saveWheelOptions();
     renderWheelOptions();
     drawWheel();
     input.value = '';
 }
 
-function removeWheelOption(i) {
+async function removeWheelOption(i) {
     wheelOptions.splice(i, 1);
-    saveWheelOptions();
+    await saveWheelOptions();
     renderWheelOptions();
     drawWheel();
 }
@@ -889,7 +939,7 @@ function drawWheel(rotation = 0) {
 let wheelAngle = 0;
 let wheelSpinning = false;
 
-function spinWheel() {
+async function spinWheel() {
     if (wheelOptions.length < 2) return alert('請至少新增 2 個選項');
     if (wheelSpinning) return;
     
@@ -914,6 +964,7 @@ function spinWheel() {
     const startAngle = wheelAngle;
     const startTime = Date.now();
     const duration = 4000;
+    const winnerName = wheelOptions[winIndex];
     
     function animate() {
         const elapsed = Date.now() - startTime;
@@ -926,8 +977,11 @@ function spinWheel() {
             requestAnimationFrame(animate);
         } else {
             wheelSpinning = false;
-            result.textContent = `結果：${wheelOptions[winIndex]}`;
+            result.textContent = `結果：${winnerName}`;
             result.classList.add('show');
+            
+            // 儲存結果到 Firestore，讓其他人也能看到
+            saveWheelResult(winnerName);
         }
     }
     
