@@ -60,7 +60,7 @@
                 <form id="create-form">
                     <div class="form-group">
                         <label>聚餐名稱</label>
-                        <input type="text" id="gathering-name" placeholder="例如：2026 春節聚餐" required>
+                        <input type="text" id="gathering-name" placeholder="例如：2025 春節聚餐" required>
                     </div>
                     <div class="form-group">
                         <label>日期</label>
@@ -68,13 +68,11 @@
                     </div>
                     <div class="form-group">
                         <label>餐廳（選填）</label>
-                        <input type="text" id="gathering-restaurant" placeholder="例如：里約">
+                        <input type="text" id="gathering-restaurant" placeholder="例如：王品牛排">
                     </div>
                     <div class="form-group">
-                        <label>使用菜單（選填）</label>
-                        <select id="gathering-menu">
-                            <option value="">不使用菜單</option>
-                        </select>
+                        <label>使用菜單（可複選）</label>
+                        <div id="gathering-menu-checkboxes" class="menu-checkbox-list"></div>
                     </div>
                     <div class="form-actions">
                         <button type="button" class="btn btn-ghost" id="cancel-create">取消</button>
@@ -154,7 +152,7 @@
             
             <div class="form-group">
                 <label>菜單名稱</label>
-                <input type="text" id="menu-name-input" placeholder="例如：里約菜單">
+                <input type="text" id="menu-name-input" placeholder="例如：義式餐廳菜單">
             </div>
             
             <div class="section">
@@ -312,6 +310,15 @@
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="config.js"></script>
     <script src="app.js"></script>
+    <script>
+        // 套用設定檔的標題和 placeholder
+        document.title = CONFIG.siteTitle;
+        document.querySelector('.app-title').textContent = CONFIG.siteTitle;
+        document.getElementById('gathering-name').placeholder = CONFIG.placeholders.gatheringName;
+        document.getElementById('gathering-restaurant').placeholder = CONFIG.placeholders.restaurant;
+        document.getElementById('menu-name-input').placeholder = CONFIG.placeholders.menuName;
+    </script>
 </body>
 </html>

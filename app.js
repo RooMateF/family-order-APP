@@ -1,14 +1,9 @@
-// ===== Firebase 設定 =====
-const firebaseConfig = {
-    apiKey: "AIzaSyCftNjFmb347SXmukXRiFhrEea0rxduI64",
-    authDomain: "family-order-app.firebaseapp.com",
-    projectId: "family-order-app",
-    storageBucket: "family-order-app.firebasestorage.app",
-    messagingSenderId: "172416471032",
-    appId: "1:172416471032:web:f16a0e0d82b1519f63500d"
-};
-firebase.initializeApp(firebaseConfig);
+// ===== 使用設定檔 =====
+firebase.initializeApp(CONFIG.firebase);
 const db = firebase.firestore();
+
+const ADMIN_PASSWORD = CONFIG.adminPassword;
+const SUPER_ADMIN_PASSWORD = CONFIG.superAdminPassword;
 
 // ===== 家庭成員 - 從 Firestore 載入 =====
 let familyGroups = [];
@@ -16,35 +11,7 @@ let memberById = {};
 let memberNameById = {};
 
 // 預設家庭結構（首次使用時會存入 Firestore）
-const defaultFamilyGroups = [
-    { id: 'grandparents', name: '阿公阿嬤', members: [
-        { id: 'm01', name: '陳惠舜' },
-        { id: 'm02', name: '林貞惠' }
-    ]},
-    { id: 'family1', name: '世松家', members: [
-        { id: 'm03', name: '陳世松' },
-        { id: 'm04', name: '張秋蓮' },
-        { id: 'm05', name: '陳昱臻' },
-        { id: 'm06', name: '陳昱瑋' }
-    ]},
-    { id: 'family2', name: '世賓家', members: [
-        { id: 'm07', name: '陳世賓' },
-        { id: 'm08', name: '鄭瑩' },
-        { id: 'm09', name: '陳昱婕' },
-        { id: 'm10', name: '陳宇' }
-    ]},
-    { id: 'family3', name: '慶龍家', members: [
-        { id: 'm11', name: '江慶龍' },
-        { id: 'm12', name: '陳怡君' },
-        { id: 'm13', name: '江柏宏' },
-        { id: 'm14', name: '江冠宏' }
-    ]},
-    { id: 'family4', name: '朝慶家', members: [
-        { id: 'm15', name: '陳朝慶' },
-        { id: 'm16', name: '陳一辰' },
-        { id: 'm17', name: '陳奕豪' }
-    ]}
-];
+const defaultFamilyGroups = CONFIG.defaultFamilyGroups;
 
 function buildMemberLookup() {
     memberById = {};
@@ -112,13 +79,10 @@ function generateFamilyId() {
     return 'family' + (maxNum + 1);
 }
 
-const ADMIN_PASSWORD = '000000';
-const SUPER_ADMIN_PASSWORD = '66666666';
-
 // ===== 全域變數 =====
 let currentGatheringId = null;
 let currentGatheringData = null;
-let currentMenuData = null;
+let currentMenus = [];  // 改成陣列，支援多菜單
 let unsubscribe = null;
 let expandedGroups = new Set();
 let isSuperAdmin = false;
@@ -320,19 +284,21 @@ async function createGathering(e) {
     const name = document.getElementById('gathering-name').value.trim();
     const date = document.getElementById('gathering-date').value;
     const restaurant = document.getElementById('gathering-restaurant').value.trim();
-    const menuId = document.getElementById('gathering-menu').value;
+    const menuIds = getSelectedMenuIds();  // 改成取得多個菜單 ID
     
     if (!name || !date) return alert('請填寫聚餐名稱和日期');
     
     try {
         await db.collection('gatherings').add({
-            name, date, restaurant, menuId,
+            name, date, restaurant, menuIds,  // 改成 menuIds 陣列
             status: 'active', orderStatus: 'open',
             attendees: {}, orders: {},
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         hideModal('create');
         document.getElementById('create-form').reset();
+        // 清除 checkbox 勾選
+        document.querySelectorAll('#gathering-menu-checkboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
         loadGatherings();
     } catch (e) { console.error('建立失敗:', e); alert('建立失敗'); }
 }
@@ -344,11 +310,11 @@ function openGathering(id) {
     unsubscribe = db.collection('gatherings').doc(id).onSnapshot(doc => {
         if (!doc.exists) { alert('聚餐不存在'); showScreen('home'); return; }
         currentGatheringData = doc.data();
-        if (currentGatheringData.menuId) {
-            currentMenuData = menus.find(m => m.id === currentGatheringData.menuId) || null;
-        } else {
-            currentMenuData = null;
-        }
+        
+        // 載入多菜單（相容舊的單一 menuId）
+        const menuIds = currentGatheringData.menuIds || (currentGatheringData.menuId ? [currentGatheringData.menuId] : []);
+        currentMenus = menuIds.map(id => menus.find(m => m.id === id)).filter(m => m);
+        
         renderGatheringDetail(currentGatheringData);
     });
 }
@@ -365,8 +331,8 @@ function renderGatheringDetail(data) {
     
     const menuRow = document.getElementById('gathering-menu-row');
     const menuInfo = document.getElementById('gathering-menu-info');
-    if (currentMenuData) {
-        menuInfo.textContent = `使用菜單：${currentMenuData.name}`;
+    if (currentMenus.length > 0) {
+        menuInfo.textContent = `使用菜單：${currentMenus.map(m => m.name).join('、')}`;
         menuRow.style.display = 'flex';
     } else {
         menuRow.style.display = 'none';
@@ -483,15 +449,22 @@ function showMenuSuggestions(input) {
     // 每次都更新，確保指向正確的輸入框
     activeSuggestionInput = input;
     
-    if (!currentMenuData || !currentMenuData.items) {
+    // 合併所有菜單的項目
+    if (currentMenus.length === 0) {
+        suggestions.classList.remove('show');
+        return;
+    }
+    
+    const allItems = currentMenus.flatMap(menu => menu.items || []);
+    if (allItems.length === 0) {
         suggestions.classList.remove('show');
         return;
     }
     
     // 空值時顯示所有選項，有輸入時過濾
     const matches = value.length === 0 
-        ? currentMenuData.items 
-        : currentMenuData.items.filter(item => item.name.toLowerCase().includes(value));
+        ? allItems 
+        : allItems.filter(item => item.name.toLowerCase().includes(value));
     
     if (matches.length === 0) {
         suggestions.classList.remove('show');
@@ -872,19 +845,24 @@ function copySummary() {
 }
 
 function showMenuView() {
-    if (!currentMenuData || !currentMenuData.items) {
+    if (currentMenus.length === 0) {
         alert('沒有菜單資料');
         return;
     }
     
-    document.getElementById('menu-view-title').textContent = currentMenuData.name;
+    document.getElementById('menu-view-title').textContent = '菜單一覽';
     
     const content = document.getElementById('menu-view-content');
-    content.innerHTML = currentMenuData.items.map(item => `
-        <div class="menu-view-item">
-            <span class="menu-view-item-name">${item.name}</span>
-            <span class="menu-view-item-price">${item.price ? '$' + item.price : '-'}</span>
-        </div>
+    
+    // 分類顯示每個菜單
+    content.innerHTML = currentMenus.map(menu => `
+        <div class="menu-view-category">${menu.name}</div>
+        ${(menu.items || []).map(item => `
+            <div class="menu-view-item">
+                <span class="menu-view-item-name">${item.name}</span>
+                <span class="menu-view-item-price">${item.price ? '$' + item.price : '-'}</span>
+            </div>
+        `).join('')}
     `).join('');
     
     showModal('menuView');
@@ -1141,9 +1119,22 @@ async function loadMenus() {
 }
 
 function updateMenuSelect() {
-    const select = document.getElementById('gathering-menu');
-    select.innerHTML = '<option value="">不使用菜單</option>' + 
-        menus.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+    const container = document.getElementById('gathering-menu-checkboxes');
+    if (menus.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = menus.map(m => `
+        <div class="menu-checkbox-item">
+            <input type="checkbox" id="menu-cb-${m.id}" value="${m.id}">
+            <label for="menu-cb-${m.id}">${m.name}</label>
+        </div>
+    `).join('');
+}
+
+function getSelectedMenuIds() {
+    const checkboxes = document.querySelectorAll('#gathering-menu-checkboxes input[type="checkbox"]:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
 }
 
 function renderMenuList() {
